@@ -110,6 +110,12 @@ pnpm selftest    # 编译 + 跑自带压测台并断言帧率
 
 ---
 
+## 🤝 贡献
+
+个人项目,仅作者本人维护。**不接受外部 PR 或贡献**,也没有精力去维护第三方提交——想基于它做自己的版本,直接 **fork** 即可(MIT 许可允许,包括闭源使用)。
+
+---
+
 ## 📄 License
 
 [MIT](LICENSE) © [InliSpwrad](https://github.com/Inlispwrad)
