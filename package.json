@@ -1,0 +1,37 @@
+{
+  "name": "deskapp",
+  "productName": "Deskapp",
+  "version": "0.1.0",
+  "description": "High-performance desktop shell for hosting demanding webapps",
+  "license": "MIT",
+  "author": "InliSpwrad",
+  "private": true,
+  "main": "build/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "selftest": "electron-vite build && electron . --smoke fixtures/stress --duration 8 --assert-fps 55 --assert-p95 20",
+    "dist:mac": "electron-vite build && electron-builder --mac --arm64 && node scripts/flatten-apps.mjs",
+    "dist:mac-x64": "electron-vite build && electron-builder --mac --x64 && node scripts/flatten-apps.mjs",
+    "dist:win": "electron-vite build && electron-builder --win --x64 && node scripts/flatten-apps.mjs",
+    "dist:linux": "electron-vite build && electron-builder --linux --x64 && node scripts/flatten-apps.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  },
+  "packageManager": "pnpm@10.22.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller",
+      "esbuild"
+    ]
+  }
+}

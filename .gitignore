@@ -1,0 +1,11 @@
+node_modules/
+build/
+dist/
+release/
+# 构建产物按设备分目录放在 apps/，体积大不进库；只保留那份说明
+apps/*
+!apps/README.md
+*.log
+.DS_Store
+.deskapp-out/
+*.tsbuildinfo

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Deskapp 压测台</title>
+<link rel="manifest" href="./manifest.json">
+<style>
+    :root { color-scheme: dark }
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0d12 }
+    body {
+        color: #e6e7ec; user-select: none;
+        font: 13px/1.55 system-ui, -apple-system, "PingFang SC", sans-serif;
+    }
+    #gl { display: block; width: 100%; height: 100% }
+    #hud {
+        position: fixed; top: 14px; left: 14px; width: 380px;
+        background: rgba(12,14,20,.86); border: 1px solid #262a35; border-radius: 10px;
+        padding: 12px 14px; backdrop-filter: blur(8px);
+    }
+    #hud h1 { font-size: 13px; font-weight: 650; margin-bottom: 2px }
+    #hud .sub { color: #8b8e9a; font-size: 11px; margin-bottom: 10px }
+    .verdict {
+        font-weight: 700; padding: 7px 10px; border-radius: 7px; margin-bottom: 10px;
+        font-family: ui-monospace, monospace; font-size: 12px;
+    }
+    .verdict.pass { background: #10281a; color: #3ddc84; border: 1px solid #1d5133 }
+    .verdict.fail { background: #2a1416; color: #ff5c5c; border: 1px solid #5a2226 }
+    .verdict.wait { background: #1a1c24; color: #8b8e9a; border: 1px solid #262a35 }
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px }
+    td { padding: 2px 0 }
+    td.k { color: #8b8e9a }
+    td.v { text-align: right; font-family: ui-monospace, monospace }
+    td.v.bad { color: #ff5c5c }
+    tr.sep td { border-top: 1px solid #262a35; padding-top: 6px }
+    #keys { margin-top: 10px; color: #8b8e9a; font-size: 11px; line-height: 1.7 }
+    kbd {
+        background: #1a1c24; border: 1px solid #303541; border-radius: 4px;
+        padding: 0 4px; font-family: ui-monospace, monospace; font-size: 10.5px; color: #c8cad2;
+    }
+</style>
+</head>
+<body>
+    <canvas id="gl"></canvas>
+    <div id="hud">
+        <h1>Deskapp 压测台</h1>
+        <div class="sub">用已知分配量校验显存记账，并施加可控渲染压力</div>
+        <div class="verdict wait" id="verdict">等待首次校验…</div>
+        <table id="stats"></table>
+        <div id="keys">
+            <kbd>A</kbd> 追加一组 16MB 纹理 ·
+            <kbd>D</kbd> 释放最后一组 ·
+            <kbd>M</kbd> 追加带 mipmap 的纹理组<br>
+            <kbd>↑</kbd><kbd>↓</kbd> 调整 draw call 数 ·
+            <kbd>L</kbd> 制造一次 300ms 长帧 ·
+            <kbd>V</kbd> 立即重新校验
+        </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+    "version": 1,
+    "name": "脱离式服务",
+    "entry": "http://127.0.0.1:3120/",
+    "window": { "width": 720, "height": 420, "background": "#14100b" },
+    "command": {
+        "run": "node start.mjs",
+        "readyUrl": "http://127.0.0.1:3120/",
+        "readyTimeoutMs": 15000
+    },
+    "hooks": { "shutdown": "node stop.mjs", "timeoutMs": 10000 }
+}

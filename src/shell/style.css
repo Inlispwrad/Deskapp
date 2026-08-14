@@ -1,0 +1,354 @@
+:root {
+    color-scheme: dark;
+    --bg: #0e0f13;
+    --bg-raise: #16181f;
+    --bg-sunken: #0a0b0e;
+    --line: #23262f;
+    --text: #e6e7ec;
+    --text-dim: #8b8e9a;
+    --accent: #4c9cff;
+    --ok: #3ddc84;
+    --warn: #ffb84c;
+    --err: #ff5c5c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    /* Swiss Style 的招牌红。整套 UI 只允许这一个强调色 */
+    --swiss-red: #e30613;
+    /* Swiss Style 用 Helvetica 系；这些都是系统本地字体，不加载任何云端字体 */
+    --swiss: "Helvetica Neue", Helvetica, Inter, Arial, "PingFang SC", sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+}
+
+button {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg-raise);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+button:hover { background: #1e2129; border-color: #30343f; }
+button:active { transform: translateY(1px); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #06121f; font-weight: 600; }
+button.primary:hover { background: #63aaff; }
+
+input, select {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg-sunken);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 8px;
+    outline: none;
+    min-width: 0;
+}
+input:focus, select:focus { border-color: var(--accent); }
+
+/* ============ 自绘标题栏（Swiss Style + 原生毛玻璃） ============
+   body 必须透明：毛玻璃来自窗口级的 vibrancy(macOS) / backgroundMaterial(Windows)，
+   要从下面透上来。CSS backdrop-filter 在这里没用 —— 它只能模糊同一页面内的背景，
+   而标题栏是独立的 WebContentsView，跨不过去。                                   */
+
+body.titlebar-body { background: transparent; overflow: hidden; }
+
+.tb {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 14px;
+    font-family: var(--swiss);
+    /* 整条都是拖拽区 —— 不依赖被装载页面提供 drag region（上一版就是这么翻的车） */
+    -webkit-app-region: drag;
+    /* 极轻的压暗层：亮色桌面下 vibrancy 会让文字发飘 */
+    background: rgba(9, 10, 13, 0.30);
+    /* Swiss：hairline 作结构线，无圆角、无渐变、无投影 */
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.11);
+}
+.tb.alert { box-shadow: inset 0 -2px 0 var(--swiss-red); }
+
+.tb-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+/* 有图标就显示 <img>；没有就退化成一个红方块 —— 不留空位，构图不塌 */
+.tb-mark {
+    width: 16px; height: 16px; flex: none;
+    background-color: var(--swiss-red);
+}
+.tb-mark.has-icon { background-color: transparent; }
+.tb-icon { width: 100%; height: 100%; display: none; object-fit: contain; }
+.tb-mark.has-icon .tb-icon { display: block; }
+
+.tb-rule { width: 1px; height: 14px; background: rgba(255, 255, 255, 0.20); flex: none; }
+
+.tb-title {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.09em;
+    text-transform: uppercase; color: rgba(255, 255, 255, 0.92);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.tb-tag {
+    flex: none;
+    font-size: 9px; font-weight: 600; letter-spacing: 0.10em;
+    color: var(--swiss-red);
+    border: 1px solid var(--swiss-red);
+    padding: 1px 4px;
+}
+.tb-tag:empty { display: none; }
+
+/* 右侧整块是**一个**按钮：四格指标点哪儿都是开 Inspector，
+   做成四个各自可点的小目标只会让人以为它们各有去处。 */
+.tb-data {
+    margin-left: auto;
+    flex: none;
+    /* 与标题栏同高的直角矩形，内容左右各留 16px */
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 16px;
+    border-radius: 0;
+    /* 重置全局 button 样式 —— 平时它必须看不出是按钮，hover 才显形 */
+    appearance: none;
+    background: transparent;
+    border: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    position: relative;
+    /* 裁掉扫出边界的部分 */
+    overflow: hidden;
+}
+/* hover 不加底色 —— 唯一的反馈就是那道扫光，靠它把"这里可以点"说清楚。
+   加了底色反而会把标题栏切成两块，破坏整条的连贯 */
+.tb-data:hover { background: transparent; }
+.tb-data:focus-visible { outline: 1px solid var(--swiss-red); outline-offset: -1px; }
+
+/* 45° 斜向扫光：hover 时 0.1s 淡入，然后一路扫出去，不回头。
+   只动 transform / opacity，全程在合成器上跑，不触发布局与重绘。
+
+   带子做成**容器满宽**、亮部靠渐变收在中间那一段 —— 于是位移百分比是相对容器的，
+   按钮多宽都能刚好在动画结束时扫出去。写成固定像素宽度会两头不着：
+   窄按钮里跑过头空转，宽按钮里又扫不完。 */
+.tb-data::after {
+    content: '';
+    position: absolute;
+    top: -60%;
+    bottom: -60%;
+    left: 0;
+    width: 100%;
+    pointer-events: none;
+    opacity: 0;
+    /* 硬断点 = 实心色块，不是柔化的光晕。
+       整套 UI 的规矩就是无渐变无投影，扫光也不该破例。 */
+    background: linear-gradient(
+        90deg,
+        transparent 46%,
+        rgba(255, 255, 255, .20) 46%,
+        rgba(255, 255, 255, .20) 54%,
+        transparent 54%
+    );
+    transform: translateX(-50%) skewX(-45deg);
+}
+.tb-data:hover::after { animation: tb-sweep .5s linear 1; }
+
+@keyframes tb-sweep {
+    /* 起点让色块**已经压在按钮左边缘**：淡入才看得见。
+       起点再往左一点，0.1s 的淡入就整个发生在可视区外，
+       实际观感变成"满亮度突然出现再扫走"，那 0.1s 等于白写。 */
+    0%   { opacity: 0; transform: translateX(-50%) skewX(-45deg); }
+    /* 0.1s / 0.5s = 20% —— 淡入占前 0.1 秒 */
+    20%  { opacity: 1; }
+    /* 终点刚好让色块整个移出右边（含 45° 斜切多出的横向宽度）。
+       再往外就是空转：动画还在跑但什么都看不见，重新 hover 也触发不了 */
+    100% { opacity: 1; transform: translateX(62%) skewX(-45deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tb-data:hover::after { animation: none; }
+}
+
+.tb-cell { display: flex; align-items: baseline; gap: 5px; }
+.tb-k {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.42);
+}
+.tb-v {
+    font-family: var(--mono);
+    font-size: 11px; font-weight: 500;
+    color: rgba(255, 255, 255, 0.94);
+    /* 等宽数字：值变化时字宽不变，标题栏不会左右抖 */
+    font-variant-numeric: tabular-nums;
+    min-width: 2.9em; text-align: right;
+}
+.tb-v.warm { color: var(--warn); }
+.tb-v.hot { color: var(--swiss-red); }
+
+/* 红色强调块并进按钮里，让 hover 区域一直延伸到最右边缘 */
+.tb-accent { width: 3px; height: 14px; background: var(--swiss-red); flex: none; align-self: center; }
+
+/* 窄窗口按信息优先级折叠。
+   断点压得很低：标题本身会 ellipsis 收缩、数据区 flex:none 不参与压缩，
+   所以四格指标在 560px 以上都放得下 —— 没必要早早把 MS 藏掉。 */
+@media (max-width: 560px) { .tb-cell[data-cell="ms"] { display: none } }
+@media (max-width: 460px) { .tb-cell[data-cell="cpu"] { display: none } }
+@media (max-width: 380px) { .tb-title, .tb-rule { display: none } }
+
+/* ============ 启动器 ============ */
+
+.launcher {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    padding: 48px 56px 20px;
+    gap: 24px;
+    overflow: hidden;
+}
+.launcher-head { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.launcher h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.4px; }
+.launcher .sub { color: var(--text-dim); margin-bottom: 22px; }
+.launcher .row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.launcher .row input { flex: 1; }
+
+/* 两种启动模式并排：本地目录 / 网址。差别只在入口，其余协议完全一致 */
+.modes { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; align-items: start; }
+.mode {
+    border: 1px solid var(--line); border-radius: 9px; padding: 14px;
+    display: flex; flex-direction: column; gap: 8px; background: var(--bg-raise);
+}
+.mode-title { font-size: 12px; font-weight: 650; letter-spacing: .02em; }
+.mode-sub { color: var(--text-dim); font-size: 11.5px; margin-top: -4px; }
+.mode-sub code { font-family: var(--mono); font-size: 11px; }
+.mode input { width: 100%; }
+.mode-extra { display: flex; flex-direction: column; gap: 6px; }
+.mode-extra input { font-size: 12px; }
+.mode button { align-self: flex-start; }
+.mode-note { color: var(--text-dim); font-size: 11px; margin-top: -2px; }
+.launcher h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text-dim);
+    margin: 22px 0 8px;
+}
+.recents { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.recent {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 10px; border-radius: 7px; cursor: pointer;
+    border: 1px solid transparent;
+}
+.recent:hover { background: var(--bg-raise); border-color: var(--line); }
+.recent .label { font-weight: 550; }
+.recent .path {
+    color: var(--text-dim); font-family: var(--mono); font-size: 11px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+}
+.recent .kind {
+    font-size: 10px; color: var(--text-dim); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; flex: none;
+}
+.recent .path { flex: 1; }
+/* 导出按钮只在悬停该行时出现，平时不抢注意力 */
+.recent-export {
+    flex: none; padding: 2px 8px; font-size: 11px;
+    opacity: 0; transition: opacity .12s;
+}
+.recent:hover .recent-export { opacity: 1; }
+.launcher-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    color: var(--text-dim); font-size: 11px; font-family: var(--mono);
+    border-top: 1px solid var(--line); padding-top: 12px;
+}
+.empty { color: var(--text-dim); padding: 10px; }
+
+/* ============ Inspector ============ */
+
+.insp { height: 100vh; display: grid; grid-template-rows: auto auto 1fr; }
+
+.insp-head {
+    padding: 10px 12px; border-bottom: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 3px;
+}
+.insp-head .name { font-weight: 600; }
+.insp-head .path {
+    color: var(--text-dim); font-family: var(--mono); font-size: 11px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.insp-bar {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px 12px; border-bottom: 1px solid var(--line);
+    background: var(--bg-sunken);
+}
+.insp-bar button { padding: 4px 8px; font-size: 12px; }
+
+.insp-body { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+
+/* flex: none 是必需的：column flex 容器里的子项默认可收缩，
+   内容溢出时卡片会被压扁、再被 overflow:hidden 裁掉，面板也永远滚不起来 */
+.card {
+    flex: none;
+    background: var(--bg-raise);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+}
+.card > h3 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-dim); padding: 9px 11px 0;
+}
+.card > .body { padding: 9px 11px 11px; }
+
+.hero { display: flex; align-items: baseline; gap: 8px; }
+.hero .value { font-size: 30px; font-weight: 600; font-family: var(--mono); letter-spacing: -1px; }
+.hero .unit { color: var(--text-dim); font-size: 12px; }
+.hero .aside { margin-left: auto; text-align: right; color: var(--text-dim); font-size: 11px; font-family: var(--mono); }
+
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 12px; }
+.kv .k { color: var(--text-dim); }
+.kv .v { font-family: var(--mono); text-align: right; }
+.kv .v.warn { color: var(--warn); }
+.kv .v.err { color: var(--err); }
+.kv .v.ok { color: var(--ok); }
+
+canvas.graph { display: block; width: 100%; height: 56px; margin-top: 8px; border-radius: 5px; background: var(--bg-sunken); }
+
+.meter { height: 6px; background: var(--bg-sunken); border-radius: 3px; overflow: hidden; margin: 8px 0 6px; }
+.meter > i { display: block; height: 100%; background: var(--ok); transition: width .18s linear, background .18s; }
+.meter > i.warn { background: var(--warn); }
+.meter > i.err { background: var(--err); }
+
+table.procs { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+table.procs th {
+    text-align: right; color: var(--text-dim); font-weight: 500;
+    padding: 2px 0 4px; border-bottom: 1px solid var(--line);
+}
+table.procs th:first-child, table.procs td:first-child { text-align: left; }
+table.procs td { padding: 2px 0; }
+table.procs tr.app td { color: var(--accent); }
+
+.log { max-height: 220px; overflow-y: auto; font-family: var(--mono); font-size: 11px; display: flex; flex-direction: column-reverse; }
+.log .line { padding: 2px 0; border-bottom: 1px solid #1b1e25; word-break: break-word; }
+.log .line.warn { color: var(--warn); }
+.log .line.error { color: var(--err); }
+.log .line .code { color: var(--text-dim); margin-right: 6px; }
+
+.banner {
+    padding: 8px 11px; border-radius: 7px; font-size: 12px;
+    border: 1px solid; display: flex; gap: 8px; align-items: flex-start;
+}
+.banner.err { background: #2a1416; border-color: #5a2226; color: #ffb3b3; }
+.banner.warn { background: #2a2114; border-color: #5a4522; color: #ffd9a3; }
+
+.settings { display: grid; grid-template-columns: 1fr 110px; gap: 6px 10px; align-items: center; font-size: 12px; }
+.settings .k { color: var(--text-dim); }
+.note { color: var(--text-dim); font-size: 11px; margin-top: 8px; line-height: 1.5; }

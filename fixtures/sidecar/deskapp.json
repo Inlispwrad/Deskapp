@@ -1,0 +1,14 @@
+{
+    "target": "http://127.0.0.1:3099/",
+    "productName": "Sidecar Test",
+    "backgroundColor": "#0b1410",
+    "width": 900,
+    "height": 560,
+    "server": {
+        "command": "node",
+        "args": ["fake-server.mjs"],
+        "readyUrl": "http://127.0.0.1:3099/",
+        "readyTimeoutMs": 20000,
+        "shutdownTimeoutMs": 3000
+    }
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>协议演示项目</title>
+<link rel="icon" href="./icon.png">
+<style>
+    :root { color-scheme: dark }
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    body {
+        min-height: 100vh; background: #0b0e14; color: #e6e7ec;
+        font: 13px/1.7 "Helvetica Neue", Helvetica, "PingFang SC", sans-serif;
+        display: grid; place-items: center; padding: 40px; user-select: none;
+    }
+    .card { width: 100%; max-width: 560px }
+    h1 { font-size: 15px; font-weight: 650; letter-spacing: .04em; margin-bottom: 4px }
+    .sub { color: #8b8e9a; font-size: 12px; margin-bottom: 20px }
+    .row {
+        display: flex; justify-content: space-between; align-items: baseline;
+        padding: 7px 0; border-bottom: 1px solid #1c1f28;
+    }
+    .k { color: #8b8e9a; font-size: 12px }
+    .v { font-family: ui-monospace, Menlo, monospace; font-size: 12px }
+    .ok { color: #3ddc84 } .bad { color: #e30613 }
+    .accent { width: 32px; height: 3px; background: #e30613; margin-bottom: 14px }
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="accent"></div>
+    <h1>协议演示项目</h1>
+    <div class="sub">验证 deskapp.json 的四个协议槽位：入口 · 启动脚本 · 命令行 · 关闭脚本</div>
+    <div class="row"><span class="k">入口（index.html）</span><span class="v ok">已加载</span></div>
+    <div class="row"><span class="k">启动脚本产物 generated.json</span><span class="v" id="prepared">读取中…</span></div>
+    <div class="row"><span class="k">常驻命令行（:3111）</span><span class="v" id="server">探测中…</span></div>
+    <div class="row"><span class="k">孙子进程（:3112）</span><span class="v" id="grandchild">探测中…</span></div>
+    <div class="row"><span class="k">window.deskapp</span><span class="v" id="host">—</span></div>
+    <div class="row"><span class="k">关闭脚本</span><span class="v">退出时删除 generated.json</span></div>
+</div>
+<script type="module">
+const set = (id, text, cls) => {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    if (cls) el.classList.add(cls);
+};
+
+const host = window.deskapp;
+set('host', host?.isDeskapp ? `在 Deskapp 内（${host.version}）` : '不在 Deskapp 内', host?.isDeskapp ? 'ok' : 'bad');
+
+try {
+    const r = await fetch('http://127.0.0.1:3111/');
+    const d = await r.json();
+    set('server', `响应正常 :${d.port}`, 'ok');
+    set('prepared', d.prepared ? `已生成 ${d.prepared}` : '未生成', d.prepared ? 'ok' : 'bad');
+    // 孙子进程由服务端代查：页面直连 3112 会被 CORS 挡（只放行清单声明的那个源）
+    set('grandchild', d.grandchild ? '存活（服务端代查）' : '不可达', d.grandchild ? 'ok' : 'bad');
+    host?.report({
+        serverUp: 1,
+        startupHookOk: d.prepared ? 1 : 0,
+        grandchildOk: d.grandchild ? 1 : 0,
+    });
+} catch (e) {
+    set('server', `不可达：${e}`, 'bad');
+    set('prepared', '拿不到', 'bad');
+    set('grandchild', '拿不到', 'bad');
+    host?.report({ serverUp: 0, startupHookOk: 0, grandchildOk: 0 });
+}
+
+host?.mark('demo-ready');
+</script>
+</body>
+</html>

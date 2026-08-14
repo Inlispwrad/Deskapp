@@ -1,0 +1,28 @@
+{
+    "version": 1,
+    "name": "协议演示项目",
+    "entry": "index.html",
+    "icon": "icon.png",
+    "window": {
+        "width": 960,
+        "height": 620,
+        "minWidth": 640,
+        "minHeight": 420,
+        "background": "#0b0e14"
+    },
+    "runtime": {
+        "vramLimitMB": 400,
+        "sampleIntervalMs": 500
+    },
+    "command": {
+        "run": "node server.mjs",
+        "readyUrl": "http://127.0.0.1:3111/health",
+        "readyTimeoutMs": 15000,
+        "shutdownTimeoutMs": 3000
+    },
+    "hooks": {
+        "startup": "node prepare.mjs",
+        "shutdown": "node cleanup.mjs",
+        "timeoutMs": 20000
+    }
+}

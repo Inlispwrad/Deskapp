@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <!-- img-src 放开 http(s)：标题栏要显示被装载页面的 favicon，
+         那是个远端 URL（由主进程从 page-favicon-updated 传来，不是页面能自己塞的）。
+         其余指令保持最紧：不允许任何脚本/样式/连接来自外部。 -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http: https:;">
+    <title>Deskapp</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+appId: com.inlispwrad.deskapp
+productName: Deskapp
+copyright: InliSpwrad
+
+directories:
+    # 注意：electron-builder 的 buildResources 默认就叫 build，
+    # 而本项目的编译产物也在 build/ —— 必须显式改开，否则两者互踩。
+    buildResources: resources
+    # 所有构建出来的应用统一进 apps/，按目标设备分子目录（见 apps/README.md）。
+    # ${os}-${arch} 由 electron-builder 展开，交叉构建多个目标不会互相覆盖。
+    output: apps/${os}-${arch}
+
+files:
+    - build/**/*
+    - package.json
+    - '!**/*.map'
+
+# 打包后仍带上自测压测台：换一台机器时可以先跑它确认 GPU 与记账正常
+extraResources:
+    - from: fixtures
+      to: fixtures
+
+asar: true
+
+# 一次只构建一个架构（脚本里用 --arm64 / --x64 指定）。
+# 多架构一起构建时 ${arch} 宏只会解析成其中一个，另一个架构的安装包会落错目录。
+mac:
+    target:
+        - dmg
+        - zip
+    category: public.app-category.developer-tools
+    # 内部工具默认不签名；要分发给公司外部时再配证书与公证
+    identity: null
+
+win:
+    target:
+        - nsis
+        - zip
+
+nsis:
+    oneClick: false
+    allowToChangeInstallationDirectory: true
+    perMachine: false
+
+linux:
+    target:
+        - AppImage
+        - deb
+    category: Development
+    synopsis: High-performance desktop shell for demanding webapps
