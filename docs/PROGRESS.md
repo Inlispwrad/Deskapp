@@ -1,7 +1,7 @@
 # PROGRESS — Deskapp v0.1.0 · alpha  (更新: 2026-08-13)
 
 > 易失的当前工作状态。每条都能脱离对话独立看懂。
-> 长期为真的东西在 KNOWLEDGE.md，细节在 `docs/`（PROTOCOL / ARCHITECTURE）。
+> 长期为真的东西在同目录 KNOWLEDGE.md，细节在 PROTOCOL.md / ARCHITECTURE.md。
 
 ## 换设备前先读这段
 
