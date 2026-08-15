@@ -1,10 +1,13 @@
 {
-    "target": "http://127.0.0.1:3099/",
-    "productName": "Sidecar Test",
-    "backgroundColor": "#0b1410",
-    "width": 900,
-    "height": 560,
-    "server": {
+    "version": 1,
+    "name": "Sidecar Test",
+    "entry": "http://127.0.0.1:3099/",
+    "window": {
+        "width": 900,
+        "height": 560,
+        "background": "#0b1410"
+    },
+    "command": {
         "command": "node",
         "args": ["fake-server.mjs"],
         "readyUrl": "http://127.0.0.1:3099/",
