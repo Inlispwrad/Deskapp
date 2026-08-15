@@ -59,7 +59,16 @@ export function mountTitlebar(root: HTMLElement): void {
 
     // 整个指标区就是一个按钮 —— 点哪一格结果都一样（都是开 Inspector），
     // 那就不该做成四个各自可点的小目标
-    $('tb-data').addEventListener('click', () => {
+    const data = $('tb-data');
+    data.addEventListener('click', (e) => {
+        // 鼠标点完主动失焦：这次点击会开/关 Inspector（独立窗口），焦点离开再回来时
+        // Chromium 把这次恢复算作"非指针发起"，:focus-visible 命中，
+        // 于是标题栏上会一直留着一圈红色描边。
+        //
+        // 必须只对鼠标做 —— 键盘按 Enter/Space 也会发 click，那种情况下失焦
+        // 等于把 Tab 的落点弄丢，正好毁掉焦点环存在的意义。
+        // 判据用 detail：鼠标点击 >= 1，键盘激活恒为 0。
+        if (e.detail > 0) data.blur();
         void api.command({ type: 'toggle-panel' });
     });
 

@@ -6,9 +6,11 @@
  *
  * 三个容易做错、这里都处理了的点：
  *
- * ① **PATH**：macOS 上从 Finder 双击启动的 app 只有极简 PATH
- *    （`/usr/bin:/bin:/usr/sbin:/sbin`），找不到 `npx` / `node` / pnpm 的 shim。
+ * ① **PATH**：从图形界面启动的 app 拿不到用户在 shell 配置里设的 PATH ——
+ *    macOS 的 Finder 只给极简 PATH（`/usr/bin:/bin:/usr/sbin:/sbin`），
+ *    Linux 的桌面项（.desktop）同理，两边都找不到 `npx` / `node` / pnpm 的 shim。
  *    所以非绝对路径的命令一律经**登录 shell** 执行，借它把用户真实 PATH 带进来。
+ *    Windows 不走这条：那里 PATH 来自注册表，进程继承的就是完整的。
  *
  * ② **进程树**：`npx X` 会再 spawn node，node 可能再 spawn worker。
  *    只杀直接子进程会留下一堆孤儿继续占着端口。这里用独立进程组 + 组信号
@@ -229,7 +231,9 @@ export class Sidecar {
  * `command`+`args` 是显式形式：给了路径就直接 exec，没给路径也要过一次登录 shell 找它。
  */
 function planExec(cfg: SidecarConfig): { file: string; argv: string[] } | null {
-    const shell = process.env.SHELL || (process.platform === 'win32' ? '' : '/bin/zsh');
+    // 兜底用 /bin/sh 而不是某个具体 shell：它是 POSIX 唯一保证存在的那个。
+    // 写死 zsh 在多数 Linux 发行版上直接 ENOENT，服务根本起不来。
+    const shell = process.env.SHELL || (process.platform === 'win32' ? '' : '/bin/sh');
 
     if (cfg.shellLine && cfg.shellLine.trim()) {
         const line = cfg.shellLine.trim();

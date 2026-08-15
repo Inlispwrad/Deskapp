@@ -14,8 +14,9 @@
  *
  * 这样导出是纯文件操作，离线可用、秒级完成，且导出物与"专属打包"完全同构。
  *
- * ⚠️ macOS 路径经过实测。Windows / Linux 用同一套拷贝注入逻辑，但**未在实机验证过**，
- * 已知局限也写在返回结果里，不假装它完整。
+ * 实测状态：macOS 与 Windows 两条路径都跑通过（导出物能自我识别内嵌清单、
+ * 启动钩子 / 常驻命令行 / 关闭钩子全部生效）。Linux 用与 Windows 同一套拷贝注入逻辑，
+ * 但**未在实机验证过**。各平台的已知局限写在返回结果的 caveats 里，不假装它完整。
  */
 
 import {
@@ -337,9 +338,7 @@ function brandGeneric(
     appName: string,
     log: ExportLog,
 ): string[] {
-    const caveats: string[] = [
-        `${process.platform === 'win32' ? 'Windows' : 'Linux'} 导出未在实机验证过`,
-    ];
+    const caveats: string[] = process.platform === 'win32' ? [] : ['Linux 导出未在实机验证过'];
     const ext = process.platform === 'win32' ? '.exe' : '';
     const from = join(output, skeleton.executable);
     const to = join(output, `${appName}${ext}`);

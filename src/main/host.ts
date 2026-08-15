@@ -109,8 +109,21 @@ const FALLBACK_BG = '#101014';
 const TITLEBAR_HEIGHT = 40;
 /** macOS 原生红绿灯占位：三个 12px 灯 + 间距，内容从这之后开始。 */
 const MAC_TRAFFIC_INSET = 82;
-/** Windows 原生窗口控件叠加层宽度。 */
-const WIN_OVERLAY_INSET = 146;
+/**
+ * Windows 原生窗口控件叠加层宽度。
+ *
+ * 实测值：用 `navigator.windowControlsOverlay.getTitlebarAreaRect()` 在
+ * Windows 11 (26200) + Electron 43 上量得 137 CSS px，
+ * 强制 devicePixelRatio 1 / 1.25 / 1.5 / 2 四档结果为 137/138/137/137 ——
+ * 也就是它按 CSS 像素恒定，不随 DPI 变，取上界 138 即可。
+ *
+ * 为什么只能写常量：叠加层的 WCO API 只对窗口顶层 webContents 可见，
+ * 而这里的标题栏是 BaseWindow 的子 WebContentsView，在它里面
+ * `windowControlsOverlay.visible === false`、rect 恒为 0，取不到真值。
+ *
+ * 宁可多留几像素也不能少留：少留会被三个原生按钮压住，多留只是右侧多点空白。
+ */
+const WIN_OVERLAY_INSET = 138;
 /** 标题栏两侧的基础留白。 */
 const TITLEBAR_PAD = 14;
 
