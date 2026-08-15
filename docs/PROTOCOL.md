@@ -200,17 +200,19 @@ electron . --export <项目目录> [--out <输出目录>] [--export-name 名称]
 | 注入应用代码 | Deskapp 有**零运行时依赖**,只要 `build/**` + 精简 `package.json`(打包态直接搬 `app.asar`) |
 | 注入项目 | 项目文件 → `Resources/project/`(跳过 `node_modules` / `.git` 等) |
 | 注入清单 | `Resources/deskapp.json`,`entry` 重指到 `project/` |
-| 改身份 | Info.plist(名称/标识/可执行名)、可执行文件改名、`icon.icns` |
+| 改身份 | macOS:Info.plist(名称/标识/可执行名)+ `icon.icns`;Windows / Linux:可执行文件改名 |
 
 于是导出是纯文件操作:离线可用、秒级完成、产物与"专属打包"完全同构。
-实测 macOS 产物 276MB。
+实测产物体积:macOS 276MB,Windows 348MB。
 
 `command` / `hooks` 的 `cwd` **不需要在导出时改写**:它们相对**内容根**(entry 所在目录)
 解析,导出后 `entry` 指向 `project/`,内容根自然跟着走。
 
-> **平台差异**:macOS 路径经过实测(导出物独立跑通了完整四槽位协议)。
-> Windows / Linux 用同一套拷贝注入逻辑但**未在实机验证过**;
-> 且 Windows 的 exe 图标与产品名编在 PE 资源里,本导出方式改不了(窗口标题与 Dock 名正确)。
+> **平台差异**:macOS 与 Windows 两条路径都经过实测 —— 导出物独立跑通了完整四槽位协议
+> (入口装载 · 启动脚本 · 常驻命令行 · 关闭脚本)。Linux 用与 Windows 同一套拷贝注入逻辑,
+> 但**未在实机验证过**。
+> 另:Windows 的 exe 图标与产品名编在 PE 资源里,本导出方式改不了(窗口标题正确);
+> Linux 的图标需要自行写 `.desktop` 条目。
 > 这些局限会原样出现在导出完成的提示里,不藏着。
 
 ---

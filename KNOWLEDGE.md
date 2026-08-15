@@ -1,6 +1,6 @@
 # KNOWLEDGE — Deskapp  (更新: 2026-08-13)
 
-> 长期共识，索引向。一行一条，不展开——详细内容在 README.md 里，这里只放指路牌。
+> 长期共识，索引向。一行一条，不展开——详细内容在 `docs/` 里，这里只放指路牌。
 
 ## 约束
 
@@ -10,7 +10,7 @@
 - **透明窗口绝不用于应用窗口**（强制走慢速合成路径）；只有一次性的图标栅格化窗口可以透明。
 - **改 `.app` 包内资源前必须检查签名是否封了资源**，正式签名的包一律放过——arm64 上签名坏了会拒绝启动。
 - **不杀不是自己启动的进程** —— sidecar 启动前先探 readyUrl，已在运行则沿用、退出时不动它。
-- 记账/统计口径一旦定下就写进注释与 README，改口径等于改结论。
+- 记账/统计口径一旦定下就写进注释与 `docs/ARCHITECTURE.md`，改口径等于改结论。
 - **导出应用与本地项目必须同构**：`deskapp.json` 一种格式三个位置，不允许出现"打包版专属逻辑"。
 - **清单里的命令是磁盘数据，执行前必须经用户确认**；放行范围（含 CORS）只覆盖项目自己声明过的东西。
 
@@ -26,7 +26,9 @@
 
 ## 关键知识索引
 
-- **一切细节的权威文档** → `README.md`（选型理由、记账口径与边界、CLI、API、打包、已知限制）
+- **协议与接口的权威文档** → `docs/PROTOCOL.md`（完整清单、`window.deskapp`、CLI、打包）
+- **架构与设计取舍的权威文档** → `docs/ARCHITECTURE.md`（选型理由、记账口径与边界、性能档位、安全姿态、已知限制）
+- 项目首页（英文默认，中文另存）→ `README.md` / `README.zh-CN.md`，两份内容需同步改
 - 显存记账实现与格式表 → `src/preload/probe.ts`、`src/preload/gl-format-size.ts`
 - 记账正确性的唯一硬证据 → `fixtures/stress/main.js`（独立算一份期望值逐字节对比）
 - 宿主编排（窗口/视图/生命周期/告警/标题栏）→ `src/main/host.ts`
@@ -36,4 +38,4 @@
 - 四槽位协议的可运行例子 → `fixtures/project-demo/`
 - 执行同意 → `src/main/consent.ts`；导出独立应用 → `src/main/export-app.ts`
 - Chromium 开关档位 → `src/main/gpu-profiles.ts`
-- webapp 侧对接面 → `README.md#windowdeskapp--webapp-对接面`
+- webapp 侧对接面 → `docs/PROTOCOL.md#windowdeskapp--webapp-对接面`

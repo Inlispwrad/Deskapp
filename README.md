@@ -1,9 +1,12 @@
 # 🖥️ Deskapp
 
-> **高性能 webapp 桌面宿主 —— 把任何 webapp 变成真正的桌面应用。**
+**English** · [简体中文](README.zh-CN.md)
 
-装载 webapp 之后,**用起来就是一个桌面应用,不是一个被遥控的浏览器**:
-浏览器痕迹全部抹掉,帧时序、显存占用、GPU 状态全部量化,并在越线时告警。
+> **A high-performance desktop shell for webapps — turn any webapp into a real desktop app.**
+
+Once loaded, your webapp **feels like a desktop application, not a remote-controlled browser**:
+every browser artifact is stripped away, while frame timing, VRAM usage and GPU state are
+measured continuously and reported the moment they cross a threshold.
 
 [![Electron](https://img.shields.io/badge/Electron-43.4.0-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -13,39 +16,67 @@
 
 ---
 
-## ✨ 特性
+## ✨ Features
 
-- **像应用,不像浏览器** —— 没有地址栏 / 标签页 / 右键菜单,窗口身份(标题、图标、尺寸、底色)由你的 webapp 自己声明,没有白闪、没有 URL 标题
-- **性能看得见** —— 自绘标题栏实时显示 `FPS / MS / CPU / MEM`;`F12` 打开独立 Inspector:帧时序、显存记账、drawcall、进程资源、GPU 状态
-- **为高性能而生** —— GPU 档位(`balanced` / `max-perf` / `compat`)、失焦仍满帧、一键销毁重建渲染进程(purge)、软件渲染静默退化检测
-- **一套协议,三种形态** —— `deskapp.json` 一份清单,本地项目 / 导出独立应用 / 内嵌专属应用同一条代码路径
-- **托管后端进程** —— 自动拉起你的 dev server、就绪轮询、退出时整棵进程树一起收;已在运行的服务沿用不杀
-- **安全** —— 本地走 `app://` 安全协议;清单命令首次执行前弹原生确认;CORS 只放行声明过的源
-- **自带压测台 + CI 门禁** —— `--smoke` 模式量化帧率 / 显存 / 长帧,按阈值给退出码
-- **三平台打包** —— macOS(`dmg`)、Windows(`nsis`)、Linux(`AppImage` / `deb`)
+- **Feels like an app, not a browser** — no address bar, no tabs, no context menu. Window identity (title, icon, size, background) is declared by your webapp itself; no white flash, no URL in the title
+- **Performance you can see** — a custom title bar shows live `FPS / MS / CPU / MEM`; `F12` opens a standalone Inspector with frame timing, VRAM accounting, draw calls, per-process resources and GPU state
+- **Built for demanding apps** — GPU profiles (`balanced` / `max-perf` / `compat`), full frame rate even when unfocused, one-shot renderer teardown/rebuild (purge), and detection of silent fallback to software rendering
+- **One protocol, three shapes** — a single `deskapp.json` manifest drives local projects, exported standalone apps, and purpose-built bundles through the same code path
+- **Managed backend processes** — starts your dev server, polls until it's ready, and tears down the whole process tree on exit; an already-running service is reused, never killed
+- **Secure by default** — local content is served over the `app://` scheme; manifest commands require native confirmation before their first run; CORS is opened only for origins the project declared
+- **Built-in benchmark + CI gate** — `--smoke` quantifies frame rate, VRAM and long frames, then sets the exit code from your thresholds
+- **Packaging for all three platforms** — macOS (`dmg`), Windows (`nsis`), Linux (`AppImage` / `deb`)
 
 ---
 
-## 🚀 快速开始
+## 🖧 Platform support
+
+All three platforms share one code path. The table below reflects **what has actually been
+tested on real hardware**, not what is intended to work:
+
+| | macOS | Windows | Linux |
+|---|---|---|---|
+| Loading · metrics · Inspector | ✅ verified | ✅ verified | ⚠️ not verified on hardware |
+| Custom title bar (icon + live metrics + blur) | ✅ vibrancy | ✅ acrylic | ➖ always native title bar |
+| Managed backend · process-tree teardown | ✅ process-group signals | ✅ `taskkill /T` | ⚠️ not verified on hardware |
+| `--export` standalone app | ✅ verified | ✅ verified | ⚠️ not verified on hardware |
+| Adopting the page icon as the app icon | ✅ rewrites `.icns` | ➖ runtime window icon only | ➖ runtime window icon only |
+| Installers | dmg · zip | nsis · zip | AppImage · deb |
+
+**Linux always uses the native title bar.** `titleBarStyle` has no effect there, so a custom bar
+would stack underneath the native one and produce a double title bar. The cost is that
+`FPS / MS / CPU / MEM` are not visible in the title bar — press `F12` and read them in the
+Inspector instead. The metrics themselves are unaffected.
+
+---
+
+## 🚀 Quick start
 
 ```bash
 pnpm install
 pnpm build
 ```
 
-装载一个本地构建产物:
+> **Do not put the repository on an exFAT volume.** Two things break there:
+> `pnpm install` fails with `ERR_PNPM_EISDIR` (the default layout needs symlinks, which exFAT
+> does not support), and `pnpm dist:*` fails with
+> `EPERM: rename 'win-unpacked.tmp' -> 'win-unpacked'`.
+> Use NTFS / APFS / ext4. If you only need dependencies installed, `pnpm install --node-linker=hoisted`
+> also works.
+
+Load a local build output:
 
 ```bash
 pnpm start -- /path/to/your/webapp/dist
 ```
 
-装载一个开发服务器:
+Load a dev server:
 
 ```bash
 pnpm start -- http://localhost:5173
 ```
 
-不带参数启动进入**项目选择器**:
+Start with no argument to open the **project picker**:
 
 ```bash
 pnpm start
@@ -53,14 +84,15 @@ pnpm start
 
 ---
 
-## ⚙️ 配置项目
+## ⚙️ Configuring a project
 
-一个目录里有个 `index.html` 就能跑;加一份 `deskapp.json` 声明窗口与服务:
+Any directory containing an `index.html` just works. Add a `deskapp.json` to declare the window
+and any services it needs:
 
 ```jsonc
 {
     "version": 1,
-    "name": "我的项目",
+    "name": "My Project",
     "entry": "index.html",
     "window": {
         "width": 1280, "height": 720,
@@ -73,46 +105,54 @@ pnpm start
         "vramLimitMB": 400
     },
     "command": {
-        "run": "npm run serve",              // 常驻服务,自动拉起
-        "readyUrl": "http://127.0.0.1:5173/",  // 轮询到它响应才加载页面
+        "run": "npm run serve",                // long-running service, started for you
+        "readyUrl": "http://127.0.0.1:5173/",  // page loads only once this responds
         "readyTimeoutMs": 90000
     },
     "hooks": {
-        "startup": "pnpm install",           // 装载前跑
-        "shutdown": "./scripts/cleanup.sh"   // 退出时跑
+        "startup": "pnpm install",             // runs before loading
+        "shutdown": "./scripts/cleanup.sh"     // runs on exit
     }
 }
 ```
 
-把项目导出成双击即用的独立应用:
+Export a project as a double-clickable standalone app (without `--out` it lands in the project's
+own `apps/<device>/`):
 
 ```bash
-electron . --export <项目目录> --out ~/Desktop
+electron . --export <project-dir> --out <output-dir>
 ```
 
 ---
 
-## 📚 文档
+## 📚 Documentation
 
-- [docs/PROTOCOL.md](docs/PROTOCOL.md) —— 项目协议与 API 详解(完整清单、`window.deskapp` 对接面、命令行、打包)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 架构与设计决策(记账口径、帧率统计口径、性能档位、安全姿态)
+> The documents below are written in Chinese.
+
+- [docs/PROTOCOL.md](docs/PROTOCOL.md) — the project protocol and API in full (complete manifest, the `window.deskapp` surface, CLI flags, packaging)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture and design decisions (accounting semantics, frame-rate statistics, performance profiles, security posture)
 
 ---
 
-## 🧪 开发
+## 🧪 Development
 
 ```bash
-pnpm typecheck   # 双 tsconfig 类型检查
-pnpm selftest    # 编译 + 跑自带压测台并断言帧率
+pnpm typecheck   # type-check both tsconfigs
+pnpm selftest    # build, then run the bundled benchmark and assert frame rate
 ```
 
-安装包构建:见 [docs/PROTOCOL.md → 出安装包](docs/PROTOCOL.md#出安装包与---export-的分工)
+Building installers: see [docs/PROTOCOL.md → 出安装包](docs/PROTOCOL.md#出安装包与---export-的分工)
 
 ---
 
-## 🤝 贡献
+## 🤝 Contributing
 
-个人项目,仅作者本人维护。**不接受外部 PR 或贡献**,也没有精力去维护第三方提交——想基于它做自己的版本,直接 **fork** 即可(MIT 许可允许,包括闭源使用)。
+This is a personal project with a single maintainer and limited time, so external pull requests
+aren't being accepted for now. That's not a lack of interest — I simply can't promise timely
+reviews, or commit to maintaining someone else's code long-term.
+
+If you want to build something on top of it, please do fork it. The MIT license lets you use it
+however you need, including commercially and in closed-source work, with no need to ask.
 
 ---
 

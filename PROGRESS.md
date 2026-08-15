@@ -1,15 +1,20 @@
 # PROGRESS — Deskapp v0.1.0 · alpha  (更新: 2026-08-13)
 
 > 易失的当前工作状态。每条都能脱离对话独立看懂。
-> 长期为真的东西在 KNOWLEDGE.md，细节在 README.md。
+> 长期为真的东西在 KNOWLEDGE.md，细节在 `docs/`（PROTOCOL / ARCHITECTURE）。
 
 ## 换设备前先读这段
 
 1. `pnpm install`。**若 `node_modules/electron/path.txt` 缺失**（pnpm 会拦 electron 的 postinstall，
    即使 package.json 里已有 `pnpm.onlyBuiltDependencies`），补跑：
    `node node_modules/electron/install.js`
+   —— 实测这个坑在 Windows 上照样会踩到，`node_modules/electron/dist/` 整个不存在。
+   另：**不要把仓库放在 exFAT 分区**，pnpm 建不了符号链接会直接 `ERR_PNPM_EISDIR`；
+   非要放就 `pnpm install --node-linker=hoisted`。
+   还有：**`node_modules` 不能跨平台拷贝**（POSIX 装的只有无扩展名 shim，Windows 上认不了），
+   换设备要删掉重装。
 2. `pnpm build` → `pnpm selftest`（跑自带压测台并断言帧率，全绿说明环境正常）
-3. **仓库还没 `git init`**（用户自己管 git）。
+3. 仓库已在 GitHub（`Inlispwrad/Deskapp`，MIT）。构建产物不进库。
 4. 构建产物统一在 `apps/<设备>/`（见 `apps/README.md`），已不再有绝对路径依赖。
 5. 早期测试目标引用过外部 demo 的绝对路径，换设备后按实际位置替换。
 
@@ -67,14 +72,76 @@
 - **图标要合成到圆角底板** —— 理由：大量 favicon 是给深色 UI 画的纯白字形，直接当 macOS 图标在 Finder 浅色背景上隐形。
 - **smoke 必须显示真实窗口** —— 理由：隐藏窗口不参与合成，Chromium 把 rAF 掐到接近 0，帧数据是假的。Linux CI 用 xvfb。
 
+## Windows 实测结论（2026-08-15，Win11 26200 + RTX 4070 Laptop）
+
+全部在实机跑过，不是推断：
+
+- **压测台通过**：打包产物与源码两条路径都 PASS，稳态 165fps / p95 6.25ms / 长帧 0，
+  显存记账逐字节一致（`vramDeltaBytes=0`）。GPU 走 ANGLE + D3D11，没有静默退化到软渲染。
+- **进程树回收干净（含孙子进程）**：`taskkill /T` 有效。三个夹具都跑完：
+  - `fixtures/sidecar` —— 后端再 spawn 一个孙子占 3100 端口，且只处理 SIGTERM
+    （Windows 根本不投递该信号）。退出后 3099 与 3100 双双释放，说明收的是整棵树。
+  - `fixtures/project-demo` / `fixtures/url-detach` —— node 进程归零、端口全部释放；
+    脱离式服务（启动命令自身退出、由孙子提供服务）也被正确识别并提示由关闭脚本收尾。
+- **启动/关闭钩子、常驻命令行、readyUrl 轮询**全部生效。
+- **`--export` 导出独立应用可用**：导出物自我识别内嵌清单，四槽位协议完整跑通。
+- **`WIN_OVERLAY_INSET` 从 146 修正为 138**：用 `navigator.windowControlsOverlay
+  .getTitlebarAreaRect()` 实测为 137 CSS px，且在 dpr 1 / 1.25 / 1.5 / 2 四档下恒定
+  （137/138/137/137），取上界 138。原值多留 9px 死区。
+  注：该 API 只对窗口顶层 webContents 可见，标题栏是子 `WebContentsView`，
+  在它里面取不到真值，所以只能写常量。
+
+### 标题栏指标区的焦点环（已修）
+
+点过指标区后会留一圈红色描边，是 `.tb-data:focus-visible` 的焦点环（`--swiss-red`，
+与装饰线同色），不是告警。成因：点击开/关 Inspector 这个独立窗口，焦点离开再回来时
+Chromium 判为「非指针发起」，于是 `:focus-visible` 命中。
+
+修法在 `src/shell/titlebar.ts` 的 click 处理：`if (e.detail > 0) data.blur()`。
+**不能无条件 `blur()`** —— 键盘按 Enter 也会发 click，那样会把 Tab 的落点弄丢，
+正好毁掉焦点环存在的意义；`detail` 恰好能区分（鼠标 ≥1，键盘恒 0）。
+
+验证：鼠标路径在 Windows 实机复现过（改前有框、改后无框，同一操作序列）；
+键盘路径用 `sendInputEvent` 发真实按键验证（Tab 后 `:focus-visible` 为 true，
+Enter 的 click `detail === 0` 且焦点保留）。
+
+### 顺手清掉的两处历史遗留
+
+- **删掉 `src/main/bundled-config.ts`（141 行死代码）**。它是早期的「内嵌配置」实现
+  （`target` / `server` / `productName` 那套 schema），后来被 `project.ts` 的
+  `loadEmbeddedProject`（`entry` / `command` schema）取代，但文件没删。
+  全仓已无 importer，删掉后 `pnpm typecheck` 照过。
+  注意：**「内嵌应用配置」这个功能本身还在**，只是实现挪到了 `project.ts`。
+- **`fixtures/sidecar/deskapp.json` 迁到当前 schema**。它此前还写着废弃的
+  `target` / `server` 字段，loader 读不懂 → 静默退化成「宿主自检」→ **仍然返回 0**，
+  是个会假装通过的坏测试，sidecar 回归实际上很久没跑过了。
+  迁移时保留 `command` + `args` 形式（不经 shell 直接 exec）——
+  project-demo 与 url-detach 都用 `run`（走登录 shell），只有这个夹具覆盖另一条分支。
+
+### 环境坑（Windows 特有）
+
+- **exFAT 分区上装不了也打不了包**（本次开发机 D: 就是 exFAT，两个坑都踩了）：
+  - `pnpm install` → `ERR_PNPM_EISDIR`，pnpm 默认布局依赖符号链接，exFAT 不支持。
+    绕过：`pnpm install --node-linker=hoisted`。
+  - `pnpm dist:win` → `EPERM: rename 'win-unpacked.tmp' -> 'win-unpacked'`。
+    **只有首次构建能过**——那次 Electron zip 是现下载的，builder 直接解压进 `win-unpacked`；
+    zip 一进缓存就改走「解压到 `.tmp` 再 rename」，而这个 rename 在 exFAT 上必失败。
+    已做对照实验确认：同源码、同缓存，仅把 `directories.output` 指到 NTFS 就成功，
+    exFAT 上连续 3 次同样失败。**结论是文件系统限制，不是项目缺陷，不要去改构建脚本。**
+    正解是把仓库放 NTFS。
+- **`CI=true` 会让 electron-builder 触发隐式发布**，没有 `GH_TOKEN` 时整条 `dist:*` 以 1 退出
+  （产物其实已经全部生成）。
+- **打包后的 `Deskapp.exe` 是 GUI subsystem 二进制**：从终端直接调用拿不到 stdout 与退出码，
+  需 `Start-Process -Wait`。CI 用 `pnpm selftest`（走 electron 包的 Node 包装器）不受影响。
+
 ## 未完成待办事项
 
 1. **应用图标还是占位符**（`packaging/gen-icon.mjs` 生成的 Swiss 几何图形，不是任何品牌标识）。
    放一个 `resources/icon.png`（≥512²）electron-builder 会自动采用。
    注意这只影响安装包与 App Bundle 本身。
-2. **Windows / Linux 从未实机验证过**。已知待查：`titleBarOverlay` 的右侧留白
-   （`WIN_OVERLAY_INSET=146`，见 `src/main/host.ts`）是否准确；Linux 恒用原生标题栏是否可接受；
-   `taskkill /T` 的进程树回收是否真的干净。
+2. **Linux 从未实机验证过**（Windows 已实测，见下方「Windows 实测结论」）。
+   Linux 侧待查：进程组信号的进程树回收是否干净；`--export` 导出物能否跑起来；
+   `Vulkan` feature 开关在各发行版上的表现。
 4. **Linux 的自绘标题栏没做**（`titleBarStyle` 在 Linux 不生效，会叠成双层，故恒用原生边框）。
    要做需自绘窗口控件（最小化/最大化/关闭），无实机不建议动。
 5. **未做 CI 配置**。`--smoke` + `--assert-*` 已就绪，缺 GitHub Actions 工作流；
@@ -83,8 +150,9 @@
    没验证过真实使用 SharedArrayBuffer 的 wasm 多线程负载。
 7. **`src/main/host.ts` 已约 1700 行**，是否拆分（窗口/视图/标题栏/项目生命周期/命令五块）待定——
    现在还读得懂，不为拆而拆。
-8. **导出的 Windows / Linux 路径未实机验证**（`src/main/export-app.ts` 的 `brandGeneric`）。
-   已知 Windows 改不了 exe 的图标与产品名；Linux 需自行写 `.desktop`。
+8. **导出的 Linux 路径未实机验证**（`src/main/export-app.ts` 的 `brandGeneric`）。
+   Windows 已实测通过。已知局限：Windows 改不了 exe 的图标与产品名；Linux 需自行写 `.desktop`。
 9. **CORS 自动放行不覆盖预检**：需要 OPTIONS 的请求仍要服务端自己应答。
+9.5 ~~点过标题栏指标区后会留一圈红色焦点环~~ **已修**（见「已完成事项」）。
 10. **项目清单没有 JSON Schema**，编辑器里没有补全与校验。字段拼错只会被静默忽略
     （`sanitize()` 只保留认识的字段）。

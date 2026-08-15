@@ -72,6 +72,20 @@ macOS / Windows 上默认用 Deskapp 自绘的标题栏,Swiss Style 排版 + 系
 - 有未消解的告警(显存越线 / 崩溃过)时,底边 hairline 换成红色实条
 - 全屏时标题栏收成 0 高,webapp 拿回整块客户区
 
+> **指标区的红色描边是焦点环,不是告警**:整块指标区是**一个 `<button>`**,
+> `:focus-visible` 命中时画 1px 的 `--swiss-red` 描边(`.tb-data:focus-visible`)——
+> 与左侧装饰线、末尾红块同一个颜色,不表示性能异常。
+>
+> **鼠标点击不会留下它,键盘会**。曾经两者都留:点击开/关 Inspector(独立窗口)导致
+> 焦点离开再回来,Chromium 把这次恢复算作"非指针发起",于是 `:focus-visible` 命中,
+> 描边一直挂到点别处为止。现在 click 处理里按 `e.detail > 0` 判断来源,
+> 鼠标点完主动 `blur()`,键盘激活(Enter/Space,`detail === 0`)则保留焦点。
+>
+> **守卫必须按来源区分,不能无条件 `blur()`** ——键盘按 Enter 也会发 click,
+> 无条件失焦等于把 Tab 的落点弄丢,正好毁掉焦点环存在的意义。
+> 已用 `sendInputEvent` 发真实按键验证:Tab 聚焦后 `:focus-visible` 为 true,
+> Enter 激活的 click `detail === 0` 且焦点保留。
+
 **为什么必须自绘**:macOS 原生标题栏不显示应用图标(平台惯例,无 API 可改)。
 
 **毛玻璃只能来自系统**:CSS `backdrop-filter` 在这里没用——它只能模糊同一页面内的背景,
