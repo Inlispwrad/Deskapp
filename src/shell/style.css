@@ -272,16 +272,21 @@ body.titlebar-body { background: transparent; overflow: hidden; }
 
 /* ============ Inspector ============ */
 
-.insp { height: 100vh; display: grid; grid-template-rows: auto auto 1fr; }
+.insp {
+    height: 100vh; display: grid; grid-template-rows: auto auto 1fr;
+    width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden;
+}
 
 .insp-head {
     padding: 10px 12px; border-bottom: 1px solid var(--line);
     display: flex; flex-direction: column; gap: 3px;
+    min-width: 0; max-width: 100%;
 }
 .insp-head .name { font-weight: 600; }
 .insp-head .path {
     color: var(--text-dim); font-family: var(--mono); font-size: 11px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    width: 100%; max-width: 100%;
 }
 
 .insp-bar {
@@ -291,7 +296,11 @@ body.titlebar-body { background: transparent; overflow: hidden; }
 }
 .insp-bar button { padding: 4px 8px; font-size: 12px; }
 
-.insp-body { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+.insp-body {
+    overflow-y: auto; overflow-x: hidden; padding: 12px;
+    display: flex; flex-direction: column; gap: 14px;
+    min-width: 0; max-width: 100%;
+}
 
 /* flex: none 是必需的：column flex 容器里的子项默认可收缩，
    内容溢出时卡片会被压扁、再被 overflow:hidden 裁掉，面板也永远滚不起来 */
@@ -345,6 +354,7 @@ table.procs tr.app td { color: var(--accent); }
 .banner {
     padding: 8px 11px; border-radius: 7px; font-size: 12px;
     border: 1px solid; display: flex; gap: 8px; align-items: flex-start;
+    min-width: 0; overflow-wrap: anywhere;
 }
 .banner.err { background: #2a1416; border-color: #5a2226; color: #ffb3b3; }
 .banner.warn { background: #2a2114; border-color: #5a4522; color: #ffd9a3; }

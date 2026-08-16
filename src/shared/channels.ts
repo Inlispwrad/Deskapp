@@ -69,6 +69,8 @@ export type ShellCommand =
       }
     /** 导出项目为独立桌面应用；不给 dir 就导当前项目 */
     | { type: 'export-project'; dir?: string }
+    /** 把一个临时网址晋升成 URL 项目并导出为独立应用 */
+    | { type: 'export-url-project'; url: string }
     /** 返回启动器：关闭当前应用窗口，把启动器窗口带回前台 */
     | { type: 'return-launcher' };
 

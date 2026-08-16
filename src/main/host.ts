@@ -1673,6 +1673,31 @@ export class Host {
         }
     }
 
+    /**
+     * 把一个临时网址晋升成 URL 项目，并走导出对话框。
+     * 与 openUrlProject 的区别：这里不是为了装载，而是为了让它变成可导出的应用。
+     */
+    async exportUrlProject(url: string): Promise<void> {
+        const clean = url.trim();
+        if (!/^https?:\/\//i.test(clean)) {
+            this.alert('error', 'project', `不是合法的网址：${clean}`);
+            return;
+        }
+        try {
+            const project = createUrlProject(join(app.getPath('userData'), 'projects'), {
+                url: clean,
+            });
+            this.alert('info', 'project', `已将临时网址晋升为项目：${project.root}`);
+            await this.exportViaDialog(project.root);
+        } catch (err) {
+            this.alert(
+                'error',
+                'project',
+                err instanceof ManifestError ? err.message : String(err),
+            );
+        }
+    }
+
     async captureScreenshot(): Promise<Buffer | null> {
         if (!this.viewIsAlive()) return null;
         try {
@@ -1779,6 +1804,9 @@ export class Host {
                 return undefined;
             case 'export-project':
                 await this.exportViaDialog(cmd.dir);
+                return undefined;
+            case 'export-url-project':
+                await this.exportUrlProject(cmd.url);
                 return undefined;
             case 'create-url-project':
                 if (this.isLauncherHost && this.onOpenUrlProjectRequest) {

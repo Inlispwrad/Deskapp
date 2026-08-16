@@ -68,7 +68,7 @@ export function mountLauncher(root: HTMLElement): void {
         goBtn.classList.toggle('primary', persist);
         note.textContent = persist
             ? '会在 Deskapp 的数据目录里生成一份 deskapp.json，之后可导出成独立应用'
-            : '只填地址 = 看一眼，不留项目';
+            : '只填地址 = 看一眼，不留项目；装载后会出现在最近列表，可在那里导出成应用';
     };
     for (const el of [nameInput, startInput, stopInput]) {
         el.addEventListener('input', syncMode);
@@ -120,14 +120,15 @@ export function mountLauncher(root: HTMLElement): void {
                 (el.querySelector('.path') as HTMLElement).textContent = `‎${t.value}`;
 
                 const exportBtn = el.querySelector('.recent-export') as HTMLButtonElement;
-                // URL 项目没有文件可打包，导不出
-                if (t.kind !== 'dir') exportBtn.remove();
-                else {
-                    exportBtn.addEventListener('click', (e) => {
-                        e.stopPropagation(); // 别顺带触发"打开这个项目"
+                exportBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // 别顺带触发"打开这个项目"
+                    if (t.kind === 'dir') {
                         void api.command({ type: 'export-project', dir: t.value });
-                    });
-                }
+                    } else {
+                        // 临时网址：先晋升成 URL 项目，再导出成独立应用
+                        void api.command({ type: 'export-url-project', url: t.value });
+                    }
+                });
 
                 el.addEventListener('click', () => {
                     void api.command({
