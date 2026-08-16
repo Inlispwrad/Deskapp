@@ -1141,7 +1141,7 @@ export class Host {
         // 用默认浏览器打开（登录态不在 Deskapp 里），还是再开一个 Deskapp 窗口装载
         // （同一 session，登录 cookie 能回流到原页面）。
         wc.setWindowOpenHandler(({ url }) => {
-            if (/^https?:/i.test(url)) void this.promptExternalOpen(url);
+            if (/^https?:/i.test(url)) void this.promptExternalOpen(wc, url);
             return { action: 'deny' };
         });
 
@@ -1150,7 +1150,7 @@ export class Host {
         wc.on('will-navigate', (event, url) => {
             if (this.isInsideApp(url)) return;
             event.preventDefault();
-            if (/^https?:/i.test(url)) void this.promptExternalOpen(url);
+            if (/^https?:/i.test(url)) void this.promptExternalOpen(wc, url);
         });
 
         wc.on('before-input-event', (event, input) => {
@@ -1236,8 +1236,9 @@ export class Host {
      * 页面请求打开外部地址（window.open / 站外跳转）时，让用户决定去向。
      * 选择「在 Deskapp 中打开」会通知管理器新开一个独立窗口 —— 每个窗口的
      * 监控、告警、采样各自独立，互不污染。
+     * 选择「在当前页面打开」则让当前应用窗口直接跳过去（登录态留在当前页面）。
      */
-    private async promptExternalOpen(url: string): Promise<void> {
+    private async promptExternalOpen(wc: WebContents, url: string): Promise<void> {
         try {
             const res = await this.messageBox({
                 type: 'question',
@@ -1245,16 +1246,19 @@ export class Host {
                 message: url,
                 detail:
                     '用默认浏览器打开，登录状态不会回到 Deskapp；' +
-                    '再开一个 Deskapp 窗口装载，则与原窗口共享登录会话，且监控各自独立。',
-                buttons: ['用默认浏览器打开', '在 Deskapp 中打开', '取消'],
+                    '在 Deskapp 新窗口打开，共享登录会话，但原页面不会变成登录后的状态；' +
+                    '在当前页面打开，则把当前应用窗口直接导航过去。',
+                buttons: ['用默认浏览器打开', '在 Deskapp 新窗口打开', '在当前页面打开', '取消'],
                 defaultId: 0,
-                cancelId: 2,
+                cancelId: 3,
                 noLink: true,
             });
             if (res.response === 0) {
                 void electronShell.openExternal(url);
             } else if (res.response === 1) {
                 this.onOpenUrlInDeskapp?.(url);
+            } else if (res.response === 2) {
+                if (!wc.isDestroyed()) void wc.loadURL(url);
             }
         } catch {
             /* 用户可能已经关了窗口；静默 */
