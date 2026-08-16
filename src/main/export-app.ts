@@ -70,7 +70,7 @@ export function deviceDirName(): string {
         process.platform === 'darwin'
             ? 'mac'
             : process.platform === 'win32'
-              ? 'windows'
+              ? 'win'
               : process.platform;
     return `${os}-${process.arch}`;
 }
