@@ -38,6 +38,12 @@ import { app, nativeImage } from 'electron';
 import { MANIFEST_NAME, iconPathOf, type LoadedProject, type ProjectManifest } from './project';
 import { buildIcns } from './icns';
 
+/**
+ * 原始 fs（不经过 Electron 的 asar 补丁）。
+ * 打包后导出时，`app.asar` 必须按普通文件复制；用被补丁过的 fs 会被当成目录读，抛出 ENOENT。
+ */
+const originalFs = require('original-fs') as typeof import('node:fs');
+
 export interface ExportOptions {
     /** 输出目录（导出物放进它里面） */
     outDir: string;
@@ -153,19 +159,21 @@ function locateSkeleton(): Skeleton | null {
 function copyAppCode(resourcesDir: string, log: ExportLog): void {
     if (app.isPackaged) {
         const asar = join(process.resourcesPath, 'app.asar');
-        if (existsSync(asar)) {
-            cpSync(asar, join(resourcesDir, 'app.asar'));
+        if (originalFs.existsSync(asar)) {
+            originalFs.cpSync(asar, join(resourcesDir, 'app.asar'));
             const unpacked = join(process.resourcesPath, 'app.asar.unpacked');
-            if (existsSync(unpacked)) {
-                cpSync(unpacked, join(resourcesDir, 'app.asar.unpacked'), { recursive: true });
+            if (originalFs.existsSync(unpacked)) {
+                originalFs.cpSync(unpacked, join(resourcesDir, 'app.asar.unpacked'), {
+                    recursive: true,
+                });
             }
             log('已注入应用代码（app.asar）');
             return;
         }
         // 没用 asar 打包的情况
         const appDir = join(process.resourcesPath, 'app');
-        if (existsSync(appDir)) {
-            cpSync(appDir, join(resourcesDir, 'app'), { recursive: true });
+        if (originalFs.existsSync(appDir)) {
+            originalFs.cpSync(appDir, join(resourcesDir, 'app'), { recursive: true });
             log('已注入应用代码（Resources/app）');
             return;
         }
