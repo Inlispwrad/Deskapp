@@ -107,20 +107,14 @@ export function mountLauncher(root: HTMLElement): void {
         recents.replaceChildren(
             ...list.map((t) => {
                 const el = document.createElement('div');
+                const iconUrl = icons[`${t.kind}:${t.value}`] ?? null;
                 el.className = 'recent';
                 el.innerHTML = `
-          <span class="recent-icon"></span>
           <span class="kind">${t.kind === 'dir' ? '项目' : '临时'}</span>
+          ${iconUrl ? `<span class="recent-icon"><img alt="" src="${iconUrl}"></span>` : ''}
           <span class="label"></span>
           <span class="path"></span>
           <button class="recent-export" title="导出成独立桌面应用">导出</button>`;
-                const iconUrl = icons[`${t.kind}:${t.value}`] ?? null;
-                if (iconUrl) {
-                    const im = document.createElement('img');
-                    im.src = iconUrl;
-                    im.alt = '';
-                    (el.querySelector('.recent-icon') as HTMLElement).append(im);
-                }
                 (el.querySelector('.label') as HTMLElement).textContent = t.label;
                 // .path 用 direction:rtl 让省略号出现在左侧（路径尾部才是有信息量的那段）。
                 // 代价是开头的 '/' 是中性字符，会被 bidi 重排到行尾。前置一个 LRM
