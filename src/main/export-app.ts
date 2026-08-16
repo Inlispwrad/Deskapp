@@ -32,11 +32,14 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { app, nativeImage } from 'electron';
 import { MANIFEST_NAME, iconPathOf, type LoadedProject, type ProjectManifest } from './project';
 import { buildIcns } from './icns';
+import { buildIco } from './ico';
+import { IconCache } from './icon-cache';
 
 /**
  * 原始 fs（不经过 Electron 的 asar 补丁）。
@@ -354,6 +357,8 @@ function brandGeneric(
     output: string,
     skeleton: Skeleton,
     executableName: string,
+    displayName: string,
+    icon: Electron.NativeImage | null,
     log: ExportLog,
 ): string[] {
     const caveats: string[] = process.platform === 'win32' ? [] : ['Linux 导出未在实机验证过'];
@@ -366,11 +371,66 @@ function brandGeneric(
         log(`可执行文件已改名为 ${basename(to)}`);
     }
     if (process.platform === 'win32') {
-        caveats.push('Windows 的 exe 图标与产品名编在 PE 资源里，本导出方式改不了（窗口标题与 Dock 名正确）');
+        const rcedit = locateRcedit();
+        if (rcedit && existsSync(rcedit)) {
+            // 老 rcedit 对非 ASCII 路径会失败：把 exe/ico 都放到 ASCII 临时路径处理，再拷回
+            const asciiTemp = tmpdir();
+            let rceditTarget = to;
+            let tempExe: string | null = null;
+            if (/[^ -]/.test(to)) {
+                tempExe = join(asciiTemp, `.deskapp-rcedit-${process.pid}.exe`);
+                rmSync(tempExe, { force: true });
+                cpSync(to, tempExe);
+                rceditTarget = tempExe;
+            }
+            const args = [
+                rceditTarget,
+                '--set-version-string',
+                'ProductName',
+                displayName,
+                '--set-version-string',
+                'FileDescription',
+                displayName,
+            ];
+            let icoPath: string | null = null;
+            if (icon && !icon.isEmpty()) {
+                icoPath = join(asciiTemp, `.deskapp-icon-${process.pid}.ico`);
+                try {
+                    writeFileSync(icoPath, buildIco(icon));
+                    args.push('--set-icon', icoPath);
+                } catch {
+                    icoPath = null;
+                }
+            }
+            const res = spawnSync(rcedit, args, { encoding: 'utf8', windowsHide: true });
+            if (tempExe) {
+                if (res.status === 0) cpSync(tempExe, to);
+                rmSync(tempExe, { force: true });
+            }
+            if (icoPath) rmSync(icoPath, { force: true });
+            if (res.status !== 0) {
+                caveats.push(
+                    `rcedit 更新 exe 资源失败（${res.status}）：${res.stderr ?? res.stdout ?? ''}`.slice(0, 300),
+                );
+            } else {
+                log(
+                    icon && !icon.isEmpty()
+                        ? '已用缓存/清单图标更新 exe 图标与产品名'
+                        : '已更新 exe 产品名（无图标可写）',
+                );
+            }
+        } else {
+            caveats.push('找不到 rcedit.exe，Windows exe 的图标与产品名未修改');
+        }
     } else {
         caveats.push('Linux 的图标需要自行写 .desktop 条目');
     }
     return caveats;
+}
+
+function locateRcedit(): string | null {
+    if (app.isPackaged) return join(process.resourcesPath, 'rcedit.exe');
+    return join(app.getAppPath(), 'node_modules', 'electron-winstaller', 'vendor', 'rcedit.exe');
 }
 
 /* ============================ 主流程 ============================ */
@@ -462,10 +522,25 @@ export function exportProject(
         log('已写入 deskapp.json（entry 指向包内 project/）');
 
         const iconPath = iconPathOf(project);
+        // 导出应用图标：清单图标优先，其次用 Deskapp 之前缓存的页面/项目图标。
+        // 这样临时网址/没有 manifest icon 的项目，导出的 exe 也能拿到自己的图标。
+        let exportIcon: Electron.NativeImage | null = iconPath
+            ? nativeImage.createFromPath(iconPath)
+            : null;
+        if (!exportIcon || exportIcon.isEmpty()) {
+            try {
+                const cache = new IconCache(() => undefined);
+                exportIcon = cache.load(`dir:${project.root}`);
+            } catch {
+                exportIcon = null;
+            }
+        }
+        if (exportIcon?.isEmpty()) exportIcon = null;
+
         caveats.push(
             ...(process.platform === 'darwin'
                 ? brandMac(output, skeleton, fsName, appId, iconPath, log, appName)
-                : brandGeneric(output, skeleton, fsName, log)),
+                : brandGeneric(output, skeleton, fsName, appName, exportIcon, log)),
         );
 
         const sizeMB = dirSizeMB(output);

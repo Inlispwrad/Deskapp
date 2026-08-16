@@ -16,9 +16,12 @@ files:
     - '!**/*.map'
 
 # 打包后仍带上自测压测台：换一台机器时可以先跑它确认 GPU 与记账正常
+# rcedit.exe 供打包后的 Deskapp 在 --export 时修改导出 exe 的图标与产品名
 extraResources:
     - from: fixtures
       to: fixtures
+    - from: node_modules/electron-winstaller/vendor/rcedit.exe
+      to: rcedit.exe
 
 asar: true
 

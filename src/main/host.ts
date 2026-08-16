@@ -191,8 +191,12 @@ export class Host {
     onOpenUrlInDeskapp: ((url: string) => void) | null = null;
     /** 窗口关闭后通知管理器移除本 Host。 */
     onClosed: (() => void) | null = null;
+    /** 应用图标缓存已更新时通知管理器刷新启动器。 */
+    onIconCached: (() => void) | null = null;
 
     private readonly isLauncherHost: boolean;
+    /** 是否把页面图标装进 .app 包（仅专属打包且 macOS 有意义）。 */
+    private readonly adoptBundleIcon: boolean;
     /**
      * 宽松导航模式：用于「在 Deskapp 中打开」的额外窗口。
      * 登录/OAuth 流程经常要跳去 accounts.google.com 之类的外部域，
@@ -213,9 +217,10 @@ export class Host {
         this.initialProject = options.initialProject ?? null;
         this.relaxedNavigation = options.relaxedNavigation === true;
         this.isLauncherHost = this.initialProject === 'launcher';
-        if (embedded?.manifest.runtime?.adoptPageIcon) {
-            this.iconCache = new IconCache((level, message) => this.alert(level, 'icon', message));
-        }
+        this.adoptBundleIcon = embedded?.manifest.runtime?.adoptPageIcon === true;
+        // 每个窗口都持有一份 IconCache：应用窗口用来缓存页面/清单图标，
+        // 启动器窗口用来读缓存并在最近列表里显示。
+        this.iconCache = new IconCache((level, message) => this.alert(level, 'icon', message));
 
         // Linux 不支持 titleBarStyle，自绘条会叠在原生标题栏下面变成双层 —— 那里保留原生边框。
         // frameless / kiosk 本就是"要全出血"的意思，也不加。
@@ -251,6 +256,7 @@ export class Host {
             gpu: null,
             crashCount: 0,
             recents: persisted.recents,
+            icons: {},
             fullscreen: false,
             panelVisible: false,
             version: {
@@ -422,18 +428,20 @@ export class Host {
         const cached = this.iconCache?.load(targetKey(this.state.target)) ?? null;
         if (cached) {
             this.applyRuntimeIcon(cached);
-            // 包内图标可能被重新打包重置回占位图 —— 判包内现状，而不是"本次有没有抓图标"
-            if (this.iconCache && !this.iconCache.bundleIconInSync()) {
-                const res = this.iconCache.installBundleIcon(cached);
-                this.alert(
-                    'info',
-                    'icon',
-                    res.ok
-                        ? '包内启动图标与缓存不一致，已用缓存的页面图标重装'
-                        : `启动图标未替换：${res.reason}`,
-                );
-            } else {
-                this.alert('info', 'icon', '启动即使用已缓存的页面图标（未等页面加载）');
+            if (this.adoptBundleIcon && this.iconCache) {
+                // 包内图标可能被重新打包重置回占位图 —— 判包内现状，而不是"本次有没有抓图标"
+                if (!this.iconCache.bundleIconInSync()) {
+                    const res = this.iconCache.installBundleIcon(cached);
+                    this.alert(
+                        'info',
+                        'icon',
+                        res.ok
+                            ? '包内启动图标与缓存不一致，已用缓存的页面图标重装'
+                            : `启动图标未替换：${res.reason}`,
+                    );
+                } else {
+                    this.alert('info', 'icon', '启动即使用已缓存的页面图标（未等页面加载）');
+                }
             }
             return;
         }
@@ -443,6 +451,8 @@ export class Host {
         const img = nativeImage.createFromPath(iconPath);
         if (img.isEmpty()) return;
         this.applyRuntimeIcon(img);
+        this.iconCache?.store(targetKey(this.state.target), img);
+        this.onIconCached?.();
     }
 
     /** 设置运行中的 Dock / 窗口图标，并把它作为标题栏图标的兜底。 */
@@ -484,10 +494,10 @@ export class Host {
     }
 
     /**
-     * 采用页面的 favicon 作为本应用图标：缓存 → 立即换 Dock 图标 → 尝试改 .app 的 icns。
-     * 只在专属打包（bundle 里 adoptPageIcon 打开）时生效。
+     * 缓存页面 favicon 作为该项目的应用图标。
+     * 每个应用窗口都会缓存；只有 adoptBundleIcon 开启时才额外把缓存装进 .app 包。
      */
-    private async adoptPageIcon(url: string): Promise<void> {
+    private async cachePageIcon(url: string): Promise<void> {
         const cache = this.iconCache;
         if (!cache) return;
         const img = await cache.adopt(
@@ -495,19 +505,26 @@ export class Host {
             url,
             this.manifest?.backgroundColor ?? null,
         );
-        if (!img) return; // 图标没变，或者抓取失败（cache 内部已记日志）
+        if (!img) {
+            // 网页栅格化失败时，退化为 nativeImage 尽力解析（仅 PNG/JPEG 可能成功）
+            await this.applyFaviconToWindow(url);
+            return;
+        }
 
         this.applyRuntimeIcon(img);
         this.pushTitlebar();
+        this.onIconCached?.();
 
-        const res = cache.installBundleIcon(img);
-        this.alert(
-            'info',
-            'icon',
-            res.ok
-                ? '已用页面图标替换启动图标（Finder 的图标缓存可能要过一会儿才刷新）'
-                : `启动图标未替换：${res.reason}`,
-        );
+        if (this.adoptBundleIcon) {
+            const res = cache.installBundleIcon(img);
+            this.alert(
+                'info',
+                'icon',
+                res.ok
+                    ? '已用页面图标替换启动图标（Finder 的图标缓存可能要过一会儿才刷新）'
+                    : `启动图标未替换：${res.reason}`,
+            );
+        }
     }
 
     /* ==================== 自绘标题栏 ==================== */
@@ -1107,8 +1124,7 @@ export class Host {
             if (url && url !== this.faviconUrl) {
                 this.faviconUrl = url;
                 this.pushTitlebar();
-                void this.adoptPageIcon(url);
-                void this.applyFaviconToWindow(url);
+                void this.cachePageIcon(url);
             }
         });
 
@@ -1448,7 +1464,31 @@ export class Host {
         this.state.settings = this.settings;
         this.state.panelVisible = this.inspector !== null;
         this.state.fullscreen = this.win?.isFullScreen() ?? false;
+        if (this.viewMode === 'launcher') this.state.icons = this.recentIcons();
         return this.state;
+    }
+
+    /** 最近列表图标（key = `${kind}:${value}` → data URL）。 */
+    private recentIcons(): Record<string, string> {
+        const out: Record<string, string> = {};
+        const cache = this.iconCache;
+        if (!cache) return out;
+        for (const r of this.state.recents) {
+            const img = cache.load(targetKey(r));
+            if (img && !img.isEmpty()) {
+                out[`${r.kind}:${r.value}`] = img
+                    .resize({ width: 32, height: 32, quality: 'best' })
+                    .toDataURL();
+            }
+        }
+        return out;
+    }
+
+    /** 应用窗口缓存了新图标后，让启动器重读缓存并刷新最近列表。 */
+    refreshRecents(): void {
+        if (this.viewMode !== 'launcher') return;
+        this.state.icons = this.recentIcons();
+        this.pushState();
     }
 
     private pushState(): void {

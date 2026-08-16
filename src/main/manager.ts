@@ -207,6 +207,7 @@ export class HostManager {
         host.onClosed = () => this.hosts.delete(host);
         host.onOpenUrlInDeskapp = (url) => void this.openUrlInDeskapp(url);
         host.onReturnLauncher = () => void this.returnToLauncher(host);
+        host.onIconCached = () => this.launcher?.refreshRecents();
     }
 
     private registerIpc(): void {

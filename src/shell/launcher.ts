@@ -99,7 +99,7 @@ export function mountLauncher(root: HTMLElement): void {
         });
     }
 
-    const renderRecents = (list: AppTarget[]): void => {
+    const renderRecents = (list: AppTarget[], icons: Record<string, string> = {}): void => {
         if (list.length === 0) {
             recents.innerHTML = '<div class="empty">还没有记录</div>';
             return;
@@ -109,10 +109,18 @@ export function mountLauncher(root: HTMLElement): void {
                 const el = document.createElement('div');
                 el.className = 'recent';
                 el.innerHTML = `
+          <span class="recent-icon"></span>
           <span class="kind">${t.kind === 'dir' ? '项目' : '临时'}</span>
           <span class="label"></span>
           <span class="path"></span>
           <button class="recent-export" title="导出成独立桌面应用">导出</button>`;
+                const iconUrl = icons[`${t.kind}:${t.value}`] ?? null;
+                if (iconUrl) {
+                    const im = document.createElement('img');
+                    im.src = iconUrl;
+                    im.alt = '';
+                    (el.querySelector('.recent-icon') as HTMLElement).append(im);
+                }
                 (el.querySelector('.label') as HTMLElement).textContent = t.label;
                 // .path 用 direction:rtl 让省略号出现在左侧（路径尾部才是有信息量的那段）。
                 // 代价是开头的 '/' 是中性字符，会被 bidi 重排到行尾。前置一个 LRM
@@ -142,7 +150,7 @@ export function mountLauncher(root: HTMLElement): void {
     };
 
     api.onState((s: HostState) => {
-        renderRecents(s.recents);
+        renderRecents(s.recents, s.icons);
         ver.textContent = `deskapp ${s.version.deskapp} · electron ${s.version.electron} · chromium ${s.version.chrome}`;
     });
 

@@ -271,6 +271,12 @@ body.titlebar-body { background: transparent; overflow: hidden; }
     border-radius: 4px; padding: 1px 5px; flex: none;
 }
 .recent .path { flex: 1; }
+.recent-icon {
+    width: 16px; height: 16px; flex: none;
+    background: var(--swiss-red);
+}
+.recent-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
 /* 导出按钮只在悬停该行时出现，平时不抢注意力 */
 .recent-export {
     flex: none; padding: 2px 8px; font-size: 11px;

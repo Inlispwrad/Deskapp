@@ -236,6 +236,8 @@ export interface HostState {
     /** 渲染进程崩溃/重建次数 */
     crashCount: number;
     recents: AppTarget[];
+    /** 最近列表项目名前的缓存图标（key = `${kind}:${value}`，value 是 data URL） */
+    icons: Record<string, string>;
     fullscreen: boolean;
     panelVisible: boolean;
     version: { deskapp: string; electron: string; chrome: string; node: string };

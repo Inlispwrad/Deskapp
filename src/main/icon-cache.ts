@@ -94,6 +94,24 @@ export class IconCache {
     }
 
     /**
+     * 缓存一张已经解码好的图（例如 manifest / deskapp.json 的图标）。
+     * 与 adopt() 的区别：这里不做网页栅格化，直接存 PNG。
+     */
+    store(key: string, img: NativeImage): void {
+        if (img.isEmpty()) return;
+        try {
+            const png = img.resize({ width: 256, height: 256, quality: 'best' }).toPNG();
+            const hash = createHash('sha256').update(png).digest('hex').slice(0, 16);
+            const file = `${hash}.png`;
+            writeFileSync(join(this.dir, file), png);
+            this.index[key] = { hash, file, sourceUrl: '' };
+            writeFileSync(this.indexPath, JSON.stringify(this.index, null, 2), 'utf8');
+        } catch (err) {
+            this.log('warn', `图标缓存写盘失败：${String(err)}`);
+        }
+    }
+
+    /**
      * 抓取页面图标并缓存。
      * @param plateColor 底板色，通常取 manifest 的 background_color
      * @returns 新图标（与已缓存内容相同时返回 null，表示无需再做任何事）
