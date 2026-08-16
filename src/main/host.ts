@@ -26,7 +26,6 @@ import {
     Menu,
     MenuItem,
     WebContentsView,
-    session,
     app,
     dialog,
     nativeImage,
@@ -81,10 +80,10 @@ import {
 import { IconCache } from './icon-cache';
 import { collectGpuStatus } from './gpu-info';
 import { sampleSystem } from './metrics';
-import { appOrigin, setAppRoot, setCrossOriginIsolated } from './protocol';
+import { setCrossOriginIsolated } from './protocol';
+import { allowApiOrigin as addCorsOrigin, registerPageOrigin, unregisterPageOrigin } from './cors';
 import {
     TargetError,
-    manifestWantsFullscreen,
     parseRemoteManifest,
     readLocalManifest,
     resolveTarget,
@@ -130,7 +129,7 @@ const TITLEBAR_PAD = 14;
 type ViewMode = 'app' | 'launcher';
 
 export class Host {
-    private win: BaseWindow | null = null;
+    win: BaseWindow | null = null;
     private view: WebContentsView | null = null;
     private viewMode: ViewMode = 'launcher';
     private inspector: BrowserWindow | null = null;
@@ -150,11 +149,10 @@ export class Host {
     private project: LoadedProject | null = null;
     /** 本次运行是否获准执行项目声明的命令 */
     private mayExecute = false;
-    /** 允许被 app:// 页面跨源访问的 API 源（只放项目自己声明的那个） */
-    private apiOrigins = new Set<string>();
-    private corsBridgeInstalled = false;
     /** teardownProject 的幂等闸门 */
     private tornDown = false;
+    /** dispose 的幂等闸门（窗口 X 关闭、shutdown、close 三条路都可能走到） */
+    private disposed = false;
     /** 采用页面图标做应用图标（专属打包才开） */
     private iconCache: IconCache | null = null;
 
@@ -181,13 +179,39 @@ export class Host {
     consoleErrors: string[] = [];
 
     /**
+     * 由 HostManager 注入的回调。
+     * 启动器窗口点「打开项目」时不能就地装载，而是通知管理器新开一个应用窗口。
+     */
+    onOpenTargetRequest: ((input: string) => void) | null = null;
+    onOpenUrlProjectRequest: ((
+        input: { url: string; name?: string; startup?: string; shutdown?: string },
+    ) => void) | null = null;
+    onReturnLauncher: (() => void) | null = null;
+    onOpenUrlInDeskapp: ((url: string) => void) | null = null;
+    /** 窗口关闭后通知管理器移除本 Host。 */
+    onClosed: (() => void) | null = null;
+
+    private readonly isLauncherHost: boolean;
+    /**
+     * 宽松导航模式：用于「在 Deskapp 中打开」的额外窗口。
+     * 登录/OAuth 流程经常要跳去 accounts.google.com 之类的外部域，
+     * 这种窗口允许 http(s) 内部跳转，不再把每一步都当外链拦截。
+     */
+    private readonly relaxedNavigation: boolean;
+    private readonly initialProject: LoadedProject | 'launcher' | null;
+
+    /**
      * @param embedded 内嵌项目清单。导出出来的独立应用靠它自我识别
      *   （`<Resources>/deskapp.json`），从而与"打开本地项目"走同一条代码路径。
      */
     constructor(
         private cli: CliOptions,
         private embedded: LoadedProject | null = null,
+        options: { initialProject?: LoadedProject | 'launcher'; relaxedNavigation?: boolean } = {},
     ) {
+        this.initialProject = options.initialProject ?? null;
+        this.relaxedNavigation = options.relaxedNavigation === true;
+        this.isLauncherHost = this.initialProject === 'launcher';
         if (embedded?.manifest.runtime?.adoptPageIcon) {
             this.iconCache = new IconCache((level, message) => this.alert(level, 'icon', message));
         }
@@ -240,26 +264,32 @@ export class Host {
     /* ==================== 启动 ==================== */
 
     async start(): Promise<void> {
-        // 目标优先级：命令行 > 内嵌清单（导出的独立应用靠它自我识别）> 启动器
         let project: LoadedProject | null = null;
-        if (this.cli.target !== null) {
-            try {
-                project = this.projectFromInput(this.cli.target);
-            } catch (err) {
-                this.alert(
-                    'error',
-                    'target',
-                    err instanceof ManifestError ? err.message : String(err),
-                );
+        if (this.initialProject === 'launcher') {
+            // 启动器窗口：不装载任何项目
+            project = null;
+        } else if (this.initialProject) {
+            project = this.initialProject;
+        } else {
+            // 目标优先级：命令行 > 内嵌清单（导出的独立应用靠它自我识别）> 启动器
+            if (this.cli.target !== null) {
+                try {
+                    project = this.projectFromInput(this.cli.target);
+                } catch (err) {
+                    this.alert(
+                        'error',
+                        'target',
+                        err instanceof ManifestError ? err.message : String(err),
+                    );
+                }
+            } else if (this.embedded) {
+                project = this.embedded;
             }
-        } else if (this.embedded) {
-            project = this.embedded;
         }
 
         // 先把项目解析出来，窗口才能一次就按正确的尺寸/底色/标题创建
         const prepared = project !== null && this.prepareProject(project);
         this.createWindow();
-        this.installMenu();
 
         if (prepared) await this.loadPrepared();
         else this.mountLauncher();
@@ -333,7 +363,8 @@ export class Host {
 
             title: this.appName(),
             resizable: ext.resizable !== false,
-            fullscreen: this.cli.fullscreen || manifestWantsFullscreen(this.manifest),
+            // 全屏是用户动作，不由 manifest 默认开启；只有 --fullscreen 才在启动时全屏
+            fullscreen: this.cli.fullscreen,
             kiosk: this.cli.kiosk,
             // 透明窗口会强制走慢速合成路径，性能宿主绝不能开
             transparent: false,
@@ -351,8 +382,11 @@ export class Host {
         this.win.on('close', () => this.rememberBounds());
         this.win.on('closed', () => {
             this.win = null;
-            this.stopSampling();
-            flushConfig();
+            this.dispose();
+            // 用户直接关掉某一个应用窗口时，也要把该项目托管的进程树与 shutdown 脚本收掉。
+            // teardownProject 幂等，和 shutdown() 里的调用不会跑两遍。
+            void this.teardownProject();
+            this.onClosed?.();
         });
         this.win.on('moved', () => this.rememberBounds());
         this.win.on('resized', () => this.rememberBounds());
@@ -550,6 +584,13 @@ export class Host {
     private destroyView(): void {
         if (!this.view) return;
         const wc = this.view.webContents;
+        if (this.viewMode === 'app') {
+            try {
+                unregisterPageOrigin(wc.id);
+            } catch {
+                /* ignore */
+            }
+        }
         if (this.win) this.win.contentView.removeChildView(this.view);
         this.view = null;
         // close() 会走正常卸载流程；destroy 由 GC 处理
@@ -581,6 +622,13 @@ export class Host {
 
         view.setBackgroundColor(this.manifest?.backgroundColor ?? FALLBACK_BG);
         this.view = view;
+        if (isApp) {
+            try {
+                registerPageOrigin(view.webContents.id, this.pageOrigin());
+            } catch {
+                /* ignore */
+            }
+        }
         this.win?.contentView.addChildView(view);
         this.layout();
 
@@ -606,7 +654,6 @@ export class Host {
         this.mayExecute = false;
         this.state.target = null;
         this.state.loadError = null;
-        setAppRoot(null);
         const view = this.createView('launcher');
         void view.webContents.loadFile(SHELL_HTML, { query: { view: 'launcher' } });
         this.win?.setTitle('Deskapp');
@@ -673,7 +720,6 @@ export class Host {
         this.mayExecute = false;
         // deskapp.json 是显式声明，压过页面自带的 Web App Manifest
         this.manifest = mergeIdentity(projectIdentity(project), readLocalManifest(resolved));
-        setAppRoot(resolved.kind === 'dir' ? resolved.root : null);
         this.applyProjectRuntime(project);
 
         // 记住的是**项目根**而不是入口文件 —— 下次打开还是同一个项目，
@@ -701,7 +747,7 @@ export class Host {
     /**
      * 让 `app://` 页面能访问项目自己声明的那个本地服务。
      *
-     * 为什么必须做：本地项目的页面跑在 `app://local`，而它的服务在
+     * 为什么必须做：本地项目的页面跑在 `app://<项目根哈希>`，而它的服务在
      * `http://127.0.0.1:PORT` —— 这是**跨源**，浏览器默认全拦。
      * 几乎每个带 `command` 的项目都会撞上，让每个项目自己去加 CORS 头是转嫁成本。
      *
@@ -711,33 +757,22 @@ export class Host {
      * 我们只能给响应补头，造不出一个服务端不给的响应。
      */
     private allowApiOrigin(readyUrl: string | undefined): void {
-        if (!readyUrl) return;
-        try {
-            this.apiOrigins.add(new URL(readyUrl).origin);
-        } catch {
-            return;
-        }
-        if (this.corsBridgeInstalled) return;
-        this.corsBridgeInstalled = true;
-        session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-            if (this.apiOrigins.size === 0) return callback({});
-            let origin: string;
+        addCorsOrigin(readyUrl, this.pageOrigin());
+    }
+
+    /** 当前页面源：本地项目是 app://<root-hash>，URL 目标是 http(s) 源。 */
+    private pageOrigin(): string {
+        if (this.target) {
             try {
-                origin = new URL(details.url).origin;
+                const u = new URL(this.target.resolvedUrl);
+                // Node 的 URL 对非 special scheme（如 app://）的 origin 会返回字符串 "null"，
+                // 必须手动拼成 `app://<host>` 才是浏览器里真正的源。
+                return u.protocol === 'app:' ? `${u.protocol}//${u.host}` : u.origin;
             } catch {
-                return callback({});
+                /* fall through */
             }
-            if (!this.apiOrigins.has(origin)) return callback({});
-            callback({
-                responseHeaders: {
-                    ...details.responseHeaders,
-                    'Access-Control-Allow-Origin': [appOrigin()],
-                    'Access-Control-Allow-Credentials': ['true'],
-                    'Access-Control-Allow-Headers': ['*'],
-                    'Access-Control-Allow-Methods': ['GET,POST,PUT,PATCH,DELETE,OPTIONS'],
-                },
-            });
-        });
+        }
+        return 'app://local';
     }
 
     /** 项目清单里的 runtime 段落 → 运行期设置。进程级开关只能提示重启。 */
@@ -967,9 +1002,6 @@ export class Host {
         this.win.setResizable(ext.resizable !== false);
         this.win.setAspectRatio(ext.aspectRatio && ext.aspectRatio > 0 ? ext.aspectRatio : 0);
 
-        if (manifestWantsFullscreen(this.manifest) && !this.win.isFullScreen()) {
-            this.win.setFullScreen(true);
-        }
     }
 
     /**
@@ -1072,18 +1104,20 @@ export class Host {
      * 这些行为单独看都很小，凑在一起就是"这是个应用"和"这是个网页"的差别。
      */
     private applyAppLikeBehavior(wc: WebContents): void {
-        // window.open 不弹一个像浏览器的新窗口，外链交给系统浏览器
+        // window.open 不弹一个像浏览器的新窗口。外链先问用户：
+        // 用默认浏览器打开（登录态不在 Deskapp 里），还是再开一个 Deskapp 窗口装载
+        // （同一 session，登录 cookie 能回流到原页面）。
         wc.setWindowOpenHandler(({ url }) => {
-            if (/^https?:/i.test(url)) void electronShell.openExternal(url);
+            if (/^https?:/i.test(url)) void this.promptExternalOpen(url);
             return { action: 'deny' };
         });
 
-        // 站外跳转一律拦下（外链交给系统浏览器）；站内导航（SPA 路由、reload）放行。
+        // 站外跳转一律拦下；站内导航（SPA 路由、reload）放行。
         // 这同时挡掉了"把文件拖进窗口 → 导航到 file:// 打开它"这个浏览器行为。
         wc.on('will-navigate', (event, url) => {
             if (this.isInsideApp(url)) return;
             event.preventDefault();
-            if (/^https?:/i.test(url)) void electronShell.openExternal(url);
+            if (/^https?:/i.test(url)) void this.promptExternalOpen(url);
         });
 
         wc.on('before-input-event', (event, input) => {
@@ -1152,6 +1186,8 @@ export class Host {
     }
 
     private isInsideApp(url: string): boolean {
+        // 宽松导航：额外开的登录窗口允许在 http(s) 域间跳转（OAuth 需要）
+        if (this.relaxedNavigation && /^https?:/i.test(url)) return true;
         const base = this.target?.resolvedUrl;
         if (!base) return false;
         try {
@@ -1160,6 +1196,35 @@ export class Host {
             return a.protocol === b.protocol && a.host === b.host;
         } catch {
             return false;
+        }
+    }
+
+    /**
+     * 页面请求打开外部地址（window.open / 站外跳转）时，让用户决定去向。
+     * 选择「在 Deskapp 中打开」会通知管理器新开一个独立窗口 —— 每个窗口的
+     * 监控、告警、采样各自独立，互不污染。
+     */
+    private async promptExternalOpen(url: string): Promise<void> {
+        try {
+            const res = await this.messageBox({
+                type: 'question',
+                title: '这个页面想打开一个外部地址',
+                message: url,
+                detail:
+                    '用默认浏览器打开，登录状态不会回到 Deskapp；' +
+                    '再开一个 Deskapp 窗口装载，则与原窗口共享登录会话，且监控各自独立。',
+                buttons: ['用默认浏览器打开', '在 Deskapp 中打开', '取消'],
+                defaultId: 0,
+                cancelId: 2,
+                noLink: true,
+            });
+            if (res.response === 0) {
+                void electronShell.openExternal(url);
+            } else if (res.response === 1) {
+                this.onOpenUrlInDeskapp?.(url);
+            }
+        } catch {
+            /* 用户可能已经关了窗口；静默 */
         }
     }
 
@@ -1377,6 +1442,20 @@ export class Host {
         return this.view !== null && !this.view.webContents.isDestroyed();
     }
 
+    /** 窗口是否仍然存在（HostManager 用）。 */
+    isAlive(): boolean {
+        return this.win !== null && !this.win.isDestroyed();
+    }
+
+    /** IPC 路由用：这个 WebContents 是否属于本 Host。 */
+    owns(wc: WebContents): boolean {
+        return (
+            this.view?.webContents === wc ||
+            this.inspector?.webContents === wc ||
+            this.titlebar?.webContents === wc
+        );
+    }
+
     /* ==================== 命令 ==================== */
 
     reload(hard: boolean): void {
@@ -1471,6 +1550,10 @@ export class Host {
             properties: ['openDirectory'],
         });
         if (res.canceled || res.filePaths.length === 0) return;
+        if (this.isLauncherHost && this.onOpenTargetRequest) {
+            this.onOpenTargetRequest(res.filePaths[0]);
+            return;
+        }
         await this.openTarget(res.filePaths[0]);
     }
 
@@ -1698,13 +1781,33 @@ export class Host {
                 await this.exportViaDialog(cmd.dir);
                 return undefined;
             case 'create-url-project':
-                await this.openUrlProject(cmd);
+                if (this.isLauncherHost && this.onOpenUrlProjectRequest) {
+                    this.onOpenUrlProjectRequest({
+                        url: cmd.url,
+                        name: cmd.name,
+                        startup: cmd.startup,
+                        shutdown: cmd.shutdown,
+                    });
+                } else {
+                    await this.openUrlProject(cmd);
+                }
                 return undefined;
             case 'open-url':
-                await this.openTarget(cmd.url);
+                if (this.isLauncherHost && this.onOpenTargetRequest) {
+                    this.onOpenTargetRequest(cmd.url);
+                } else {
+                    await this.openTarget(cmd.url);
+                }
                 return undefined;
             case 'open-target':
-                await this.openTarget(cmd.target.value);
+                if (this.isLauncherHost && this.onOpenTargetRequest) {
+                    this.onOpenTargetRequest(cmd.target.value);
+                } else {
+                    await this.openTarget(cmd.target.value);
+                }
+                return undefined;
+            case 'return-launcher':
+                this.onReturnLauncher?.();
                 return undefined;
             case 'reload':
                 this.reload(cmd.hard === true);
@@ -1756,77 +1859,6 @@ export class Host {
         }
     }
 
-    /* ==================== 菜单 ==================== */
-
-    private installMenu(): void {
-        if (process.platform !== 'darwin') {
-            // Win/Linux：不挂菜单栏，窗口顶上就没有那条"这是个浏览器"的横条
-            Menu.setApplicationMenu(null);
-            return;
-        }
-        // mac 必须留菜单，否则 Cmd+Q / Cmd+W / Cmd+H 全失效，反而不像原生应用
-        const name = app.getName();
-        Menu.setApplicationMenu(
-            Menu.buildFromTemplate([
-                {
-                    label: name,
-                    submenu: [
-                        { role: 'about' },
-                        { type: 'separator' },
-                        { role: 'hide' },
-                        { role: 'hideOthers' },
-                        { role: 'unhide' },
-                        { type: 'separator' },
-                        { role: 'quit' },
-                    ],
-                },
-                {
-                    label: '编辑',
-                    submenu: [
-                        { role: 'undo' },
-                        { role: 'redo' },
-                        { type: 'separator' },
-                        { role: 'cut' },
-                        { role: 'copy' },
-                        { role: 'paste' },
-                        { role: 'selectAll' },
-                    ],
-                },
-                {
-                    label: '视图',
-                    submenu: [
-                        {
-                            label: '全屏',
-                            accelerator: 'Ctrl+Cmd+F',
-                            click: () => this.toggleFullscreen(),
-                        },
-                        {
-                            label: 'Inspector',
-                            accelerator: 'Alt+Cmd+I',
-                            click: () => this.toggleInspector(),
-                        },
-                        { type: 'separator' },
-                        {
-                            label: '重新加载',
-                            accelerator: 'Cmd+Shift+R',
-                            click: () => this.reload(true),
-                        },
-                        {
-                            label: '销毁并重建渲染进程',
-                            accelerator: 'Cmd+Shift+P',
-                            click: () => void this.purge(),
-                        },
-                        {
-                            label: '页面 DevTools',
-                            click: () => this.openDevTools(),
-                        },
-                    ],
-                },
-                { role: 'windowMenu', label: '窗口' },
-            ]),
-        );
-    }
-
     /* ==================== 关闭 ==================== */
 
     /**
@@ -1839,16 +1871,27 @@ export class Host {
     }
 
     close(): void {
+        this.dispose();
+        if (this.win) {
+            this.win.close();
+        } else {
+            this.onClosed?.();
+        }
+    }
+
+    private dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
         // 先收后端：它是我们拉起来的，不能留成孤儿占着端口
         this.sidecar?.stop();
         this.stopSampling();
         this.inspector?.close();
+        this.inspector = null;
         this.destroyView();
         if (this.titlebar && !this.titlebar.webContents.isDestroyed()) {
             this.titlebar.webContents.close();
         }
         this.titlebar = null;
-        this.win?.close();
         flushConfig();
     }
 }

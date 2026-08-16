@@ -321,7 +321,8 @@ export function projectIdentity(project: LoadedProject): AppManifest | null {
         shortName: null,
         backgroundColor: w.background ?? null,
         themeColor: null,
-        display: w.fullscreen ? 'fullscreen' : null,
+        // window.fullscreen 不再自动全屏（全屏是用户动作），display 保留为 null
+        display: null,
         iconPath: iconPathOf(project),
         deskapp: {
             ...(w.width !== undefined ? { width: w.width } : {}),

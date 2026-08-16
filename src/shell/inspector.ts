@@ -24,7 +24,7 @@ const TEMPLATE = `
     <button data-cmd="devtools">DevTools</button>
     <button data-cmd="fullscreen">全屏</button>
     <button data-cmd="screenshot">截图</button>
-    <button data-cmd="open-dir">换应用…</button>
+    <button data-cmd="return-launcher">返回启动器</button>
   </div>
 
   <div class="insp-body">
@@ -190,8 +190,8 @@ export function mountInspector(root: HTMLElement): void {
             case 'screenshot':
                 void api.command({ type: 'screenshot' });
                 break;
-            case 'open-dir':
-                void api.command({ type: 'open-dir' });
+            case 'return-launcher':
+                void api.command({ type: 'return-launcher' });
                 break;
             default:
                 break;

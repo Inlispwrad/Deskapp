@@ -240,7 +240,7 @@ WebGL/WebGPU 调用,维护影子绑定状态,逐对象累计。
 - **设置**:档位、显存与 RSS 告警线、采样周期
 - **日志**:宿主告警 + 页面 `console.warn/error`
 
-工具栏动作:刷新 / 硬刷新 / **销毁重建** / GC / DevTools / 全屏 / 截图 / 换应用。
+工具栏动作:刷新 / 硬刷新 / **销毁重建** / GC / DevTools / 全屏 / 截图 / 返回启动器。
 
 > **销毁重建(purge)和刷新的区别**:刷新复用渲染进程,GPU 侧资源与 V8 堆碎片都留着;
 > purge 把整个渲染进程扔掉重建,是唯一能真正把显存与堆归零的手段。
@@ -328,7 +328,7 @@ WebGL 原型上,被装载页面用 `contextIsolation: false` + `nodeIntegration:
 ```
 src/
   main/            主进程:窗口、app:// 协议、项目清单、执行同意、托管进程、
-                   档位、指标、崩溃恢复、导出、smoke
+                   档位、指标、崩溃恢复、导出、smoke、多窗口编排(manager.ts)
   preload/         被装载页面的 preload(探针 + window.deskapp)与 shell preload
   shell/           Inspector / 启动器 / 自绘标题栏 UI(原生 DOM,无框架)
   shared/          三方共享的类型与 IPC 频道定义

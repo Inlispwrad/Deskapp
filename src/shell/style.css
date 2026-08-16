@@ -133,7 +133,7 @@ body.titlebar-body { background: transparent; overflow: hidden; }
 /* hover 不加底色 —— 唯一的反馈就是那道扫光，靠它把"这里可以点"说清楚。
    加了底色反而会把标题栏切成两块，破坏整条的连贯 */
 .tb-data:hover { background: transparent; }
-.tb-data:focus-visible { outline: 1px solid var(--swiss-red); outline-offset: -1px; }
+.tb-data:focus, .tb-data:focus-visible { outline: none; }
 
 /* 45° 斜向扫光：hover 时 0.1s 淡入，然后一路扫出去，不回头。
    只动 transform / opacity，全程在合成器上跑，不触发布局与重绘。
@@ -196,7 +196,7 @@ body.titlebar-body { background: transparent; overflow: hidden; }
 .tb-v.hot { color: var(--swiss-red); }
 
 /* 红色强调块并进按钮里，让 hover 区域一直延伸到最右边缘 */
-.tb-accent { width: 3px; height: 14px; background: var(--swiss-red); flex: none; align-self: center; }
+.tb-accent { width: 3px; height: 14px; background: #D4AF37; flex: none; align-self: center; }
 
 /* 窄窗口按信息优先级折叠。
    断点压得很低：标题本身会 ellipsis 收缩、数据区 flex:none 不参与压缩，

@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { AppTarget, PerfProfile } from '../shared/types';
+import { appUrlForRoot } from './protocol';
 
 /** manifest 里 Deskapp 私有扩展字段。 */
 export interface DeskappManifestExt {
@@ -81,7 +82,8 @@ export function resolveTarget(input: string): ResolvedTarget {
         // 走自定义标准协议而不是 file://：file:// 是不透明源，
         // IndexedDB / SharedArrayBuffer / 模块脚本 / fetch 都会出问题，
         // 而且构建产物里的 /assets/... 绝对路径在 file:// 下直接失效。
-        resolvedUrl: `app://local/${entry}`,
+        // 每个项目根有独立 app:// 主机名：多个本地项目可同时打开，且存储互不污染。
+        resolvedUrl: appUrlForRoot(root, entry),
         label: basename(root),
         root,
         entry,
@@ -195,9 +197,3 @@ export function parseRemoteManifest(raw: string, pageUrl: string): AppManifest |
     });
 }
 
-/** manifest.display 是否要求全屏起。 */
-export function manifestWantsFullscreen(m: AppManifest | null): boolean {
-    if (!m) return false;
-    if (m.deskapp.fullscreen) return true;
-    return m.display === 'fullscreen';
-}

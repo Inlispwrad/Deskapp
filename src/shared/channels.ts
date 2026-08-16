@@ -68,7 +68,9 @@ export type ShellCommand =
           shutdown?: string;
       }
     /** 导出项目为独立桌面应用；不给 dir 就导当前项目 */
-    | { type: 'export-project'; dir?: string };
+    | { type: 'export-project'; dir?: string }
+    /** 返回启动器：关闭当前应用窗口，把启动器窗口带回前台 */
+    | { type: 'return-launcher' };
 
 /** 被装载页面可以发起的命令（window.deskapp）。 */
 export type PageCommand =

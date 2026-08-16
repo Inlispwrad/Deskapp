@@ -62,7 +62,7 @@ export function loadConfig(): PersistedConfig {
         };
     } catch {
         // 首次运行或文件损坏：用默认值，不打扰用户
-        cache = { ...DEFAULTS, windows: {}, recents: [], settings: {} };
+        cache = { ...DEFAULTS, windows: {}, recents: [], settings: {}, consents: {} };
     }
     return cache;
 }

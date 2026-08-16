@@ -7,5 +7,5 @@ apps/*
 !apps/README.md
 *.log
 .DS_Store
-.deskapp-out/
+.deskapp-out*/
 *.tsbuildinfo

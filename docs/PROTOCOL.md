@@ -45,7 +45,7 @@
 | `name` / `short_name` | 窗口标题、macOS Dock 名称 |
 | `background_color` | 窗口底色(消除启动白闪) |
 | `icons` | 取最大尺寸那张作为窗口/Dock 图标 |
-| `display: "fullscreen"` | 全屏启动 |
+| `display: "fullscreen"` | 已忽略 —— 全屏是用户动作（F11 / 菜单），不由 manifest 默认开启 |
 | `deskapp.width/height` | 初始窗口尺寸 |
 | `deskapp.minWidth/minHeight` | 最小尺寸 |
 | `deskapp.resizable` | 是否允许缩放 |
@@ -60,7 +60,7 @@
 
 ## 项目协议 `deskapp.json`
 
-Deskapp 打开时是**项目选择器**(这是它自己的启动器)。选一个项目目录即可运行。
+Deskapp 打开时是**项目选择器**(这是它自己的启动器)。选一个项目目录会**新开一个应用窗口**来运行；启动器窗口保留，因此可以同时打开多个装载。
 
 **一种格式,三个位置** —— 这是整个抽象化的核心,导出应用与本地项目走的是同一条代码路径,
 不存在"打包版特殊逻辑":
@@ -106,7 +106,7 @@ Deskapp 打开时是**项目选择器**(这是它自己的启动器)。选一个
         "background": "#0a0d12",             // 窗口底色,消除启动白闪
         "resizable": true,
         "aspectRatio": 0,                    // 锁宽高比,0 = 不锁
-        "fullscreen": false,
+        "fullscreen": false,                // 已忽略：全屏只能用户手动开（F11 / 菜单 / --fullscreen）
         "frameless": false,
         "nativeTitlebar": false
     },
@@ -169,7 +169,7 @@ Deskapp 打开时是**项目选择器**(这是它自己的启动器)。选一个
 
 ### 页面访问自己的服务:CORS 已自动放行
 
-本地项目的页面跑在 `app://local`,而它的服务在 `http://127.0.0.1:PORT` —— 这是**跨源**,
+本地项目的页面跑在 `app://<项目根哈希>`,而它的服务在 `http://127.0.0.1:PORT` —— 这是**跨源**,
 浏览器默认全拦。几乎每个带 `command` 的项目都会撞上,所以 Deskapp 自动给
 **清单里 `readyUrl` 的那个源**补上 CORS 响应头。
 

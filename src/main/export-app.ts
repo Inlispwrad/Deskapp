@@ -261,6 +261,15 @@ function sanitizeAppId(name: string): string {
     return `com.deskapp.x${hash}`;
 }
 
+/** 应用名 → 可安全用于文件名/可执行名的字符串。 */
+function sanitizeFileName(name: string): string {
+    const cleaned = name
+        .replace(/[<>:"/\|?*\u0000-\u001f]/g, '-')
+        .replace(/[. ]+$/g, '')
+        .trim();
+    return cleaned || 'Deskapp';
+}
+
 /** 极小的 plist 值替换：只改我们自己认识的那几个键。 */
 function patchPlist(plistPath: string, values: Record<string, string>): void {
     let text = readFileSync(plistPath, 'utf8');
@@ -286,10 +295,11 @@ function patchPlist(plistPath: string, values: Record<string, string>): void {
 function brandMac(
     output: string,
     skeleton: Skeleton,
-    appName: string,
+    executableName: string,
     appId: string,
     iconPath: string | null,
     log: ExportLog,
+    displayName: string,
 ): string[] {
     const caveats: string[] = [];
     const contents = join(output, 'Contents');
@@ -298,16 +308,16 @@ function brandMac(
 
     // 可执行文件改名 —— 它决定 Dock 上显示的进程名，必须与 CFBundleExecutable 一致
     const from = join(macos, skeleton.executable);
-    const to = join(macos, appName);
+    const to = join(macos, executableName);
     if (existsSync(from) && from !== to) {
         renameSync(from, to);
         chmodSync(to, 0o755);
     }
 
     patchPlist(join(contents, 'Info.plist'), {
-        CFBundleName: appName,
-        CFBundleDisplayName: appName,
-        CFBundleExecutable: appName,
+        CFBundleName: displayName,
+        CFBundleDisplayName: displayName,
+        CFBundleExecutable: executableName,
         CFBundleIdentifier: appId,
         CFBundleIconFile: 'icon.icns',
     });
@@ -335,13 +345,13 @@ function brandMac(
 function brandGeneric(
     output: string,
     skeleton: Skeleton,
-    appName: string,
+    executableName: string,
     log: ExportLog,
 ): string[] {
     const caveats: string[] = process.platform === 'win32' ? [] : ['Linux 导出未在实机验证过'];
     const ext = process.platform === 'win32' ? '.exe' : '';
     const from = join(output, skeleton.executable);
-    const to = join(output, `${appName}${ext}`);
+    const to = join(output, `${executableName}${ext}`);
     if (existsSync(from) && from !== to) {
         renameSync(from, to);
         if (process.platform !== 'win32') chmodSync(to, 0o755);
@@ -377,11 +387,12 @@ export function exportProject(
         const appName =
             options.name?.trim() || project.manifest.name?.trim() || basename(project.root);
         const appId = options.appId?.trim() || sanitizeAppId(appName);
+        const fsName = sanitizeFileName(appName);
         const outDir = resolve(options.outDir);
         mkdirSync(outDir, { recursive: true });
 
         const output =
-            process.platform === 'darwin' ? join(outDir, `${appName}.app`) : join(outDir, appName);
+            process.platform === 'darwin' ? join(outDir, `${fsName}.app`) : join(outDir, fsName);
 
         if (existsSync(output)) {
             if (!options.overwrite) {
@@ -412,8 +423,8 @@ export function exportProject(
         const iconPath = iconPathOf(project);
         caveats.push(
             ...(process.platform === 'darwin'
-                ? brandMac(output, skeleton, appName, appId, iconPath, log)
-                : brandGeneric(output, skeleton, appName, log)),
+                ? brandMac(output, skeleton, fsName, appId, iconPath, log, appName)
+                : brandGeneric(output, skeleton, fsName, log)),
         );
 
         const sizeMB = dirSizeMB(output);

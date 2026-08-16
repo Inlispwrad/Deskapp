@@ -8,15 +8,13 @@
  *   ④ ready 之后再挂协议处理器、建窗口
  */
 
-import { app, ipcMain } from 'electron';
-import { CH, type PageCommand, type ShellCommand } from '../shared/channels';
-import type { ProbeSample } from '../shared/types';
+import { app } from 'electron';
 import { defaultExportDir, exportProject } from './export-app';
 import { loadEmbeddedProject, loadProjectAt, resolveEntry } from './project';
 import { HELP, parseCli } from './cli';
 import { loadConfig } from './config';
 import { applySwitches, planSwitches } from './gpu-profiles';
-import { Host } from './host';
+import { HostManager } from './manager';
 import { installAppProtocol, registerAppScheme } from './protocol';
 import { runSmoke } from './smoke';
 
@@ -97,7 +95,7 @@ cli.angle = effectiveAngle;
 
 /* ---------- 启动 ---------- */
 
-let host: Host | null = null;
+let manager: HostManager | null = null;
 
 app.whenReady()
     .then(async () => {
@@ -110,18 +108,10 @@ app.whenReady()
             return;
         }
 
-        host = new Host(cli, embedded);
-        const h = host;
+        manager = new HostManager(cli, embedded);
+        const smokeHost = await manager.start();
 
-        for (const note of plan.notes) h.alert('info', 'switches', note);
-
-        ipcMain.on(CH.probeSample, (_e, sample: ProbeSample) => h.handleProbeSample(sample));
-        ipcMain.on(CH.pageReady, () => h.handlePageReady());
-        ipcMain.handle(CH.pageCommand, (_e, cmd: PageCommand) => h.handlePageCommand(cmd));
-        ipcMain.handle(CH.command, (_e, cmd: ShellCommand) => h.handleShellCommand(cmd));
-        ipcMain.on(CH.shellReady, (e) => h.handleShellReady(e.sender));
-
-        await h.start();
+        for (const note of plan.notes) smokeHost.alert('info', 'switches', note);
 
         if (cli.smoke) {
             // 看门狗：GPU 进程崩溃、页面死循环等情况下 smoke 可能永远走不完。
@@ -129,22 +119,25 @@ app.whenReady()
             const budgetMs = (cli.warmupSec + cli.durationSec) * 1000 + 30_000;
             const watchdog = setTimeout(() => {
                 process.stderr.write(
-                    `[deskapp] smoke 超过 ${Math.round(budgetMs / 1000)}s 未完成，强制退出\n`,
+                    `[deskapp] smoke 超过 ${Math.round(budgetMs / 1000)}s 未完成，强制退出
+`,
                 );
                 app.exit(1);
             }, budgetMs);
             watchdog.unref?.();
 
-            const code = await runSmoke(h, cli);
+            const code = await runSmoke(smokeHost, cli);
             clearTimeout(watchdog);
             // 必须 await：项目的 shutdown 脚本是异步的，直接 app.exit 会把它腰斩
-            await h.shutdown();
+            await manager.shutdownAll();
             app.exit(code);
         }
     })
     .catch((err) => {
-        process.stderr.write(`[deskapp] 启动失败：${String(err)}\n`);
-        if (err instanceof Error && err.stack) process.stderr.write(`${err.stack}\n`);
+        process.stderr.write(`[deskapp] 启动失败：${String(err)}
+`);
+        if (err instanceof Error && err.stack) process.stderr.write(`${err.stack}
+`);
         app.exit(1);
     });
 
@@ -155,12 +148,14 @@ function runExport(): number {
     try {
         project = loadProjectAt(dir);
     } catch (err) {
-        process.stderr.write(`[deskapp] ${String(err)}\n`);
+        process.stderr.write(`[deskapp] ${String(err)}
+`);
         return 1;
     }
     if (!resolveEntry(project)) {
         process.stderr.write(
-            `[deskapp] ${dir} 里找不到入口（${project.manifest.entry ?? 'index.html'}）\n`,
+            `[deskapp] ${dir} 里找不到入口（${project.manifest.entry ?? 'index.html'}）
+`,
         );
         return 1;
     }
@@ -173,20 +168,25 @@ function runExport(): number {
             ...(cli.exportAppId ? { appId: cli.exportAppId } : {}),
             overwrite: true,
         },
-        (message) => process.stdout.write(`[export] ${message}\n`),
+        (message) => process.stdout.write(`[export] ${message}
+`),
     );
 
-    for (const c of res.caveats) process.stdout.write(`[export][注意] ${c}\n`);
+    for (const c of res.caveats) process.stdout.write(`[export][注意] ${c}
+`);
     if (!res.ok) {
-        process.stderr.write(`[export] 失败：${res.error}\n`);
+        process.stderr.write(`[export] 失败：${res.error}
+`);
         return 1;
     }
-    process.stdout.write(`\n✅ ${res.appName} → ${res.output}\n`);
+    process.stdout.write(`
+✅ ${res.appName} → ${res.output}
+`);
     return 0;
 }
 
 app.on('window-all-closed', () => {
-    // 单应用宿主：窗口关了就退出（包含 macOS —— 它不是一个多文档应用）
+    // 所有窗口都关了才退出（含 macOS —— 启动器 + 多个应用窗口都由它兜底）
     app.quit();
 });
 
@@ -194,17 +194,17 @@ app.on('window-all-closed', () => {
 // 只挡一次，否则 app.exit 触发的 before-quit 会绕成死循环。
 let quitting = false;
 app.on('before-quit', (event) => {
-    if (quitting || !host) return;
+    if (quitting || !manager) return;
     quitting = true;
     event.preventDefault();
-    void host.shutdown().finally(() => app.exit(0));
+    void manager.shutdownAll().finally(() => app.exit(0));
 });
 
 // 从终端跑时 Ctrl+C / kill 不会走 before-quit，托管的后端进程就会留成孤儿占着端口。
 // 这里补上信号兜底 —— 只有被 SIGKILL 才拦不住（那种情况谁也拦不住）。
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
     process.on(sig, () => {
-        host?.close();
+        manager?.closeAll();
         app.exit(sig === 'SIGINT' ? 130 : 143);
     });
 }
@@ -212,14 +212,14 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
 // GPU 进程挂掉是这个工具最该大声喊的事情之一
 app.on('child-process-gone', (_e, details) => {
     if (details.type === 'GPU') {
-        host?.alert(
+        manager?.alertAll(
             'error',
             'gpu-crash',
             `GPU 进程退出：reason=${details.reason} exitCode=${details.exitCode}。` +
                 `画面会短暂黑屏后由 Chromium 重建上下文；WebGL 资源全部丢失，页面需要处理 webglcontextlost。`,
         );
     } else if (details.reason !== 'clean-exit') {
-        host?.alert(
+        manager?.alertAll(
             'warn',
             'child-gone',
             `子进程退出：type=${details.type} reason=${details.reason}`,
