@@ -375,6 +375,39 @@ function brandGeneric(
 
 /* ============================ 主流程 ============================ */
 
+/**
+ * 拷贝运行时骨架。只拷运行一个 Electron 应用所需的文件：
+ * 跳过安装包 / zip / blockmap / 其他导出物，避免把构建目录里的非运行时垃圾一起带走。
+ */
+function copySkeleton(skeleton: Skeleton, output: string): void {
+    mkdirSync(output, { recursive: true });
+    for (const name of readdirSync(skeleton.root)) {
+        const from = join(skeleton.root, name);
+        const to = join(output, name);
+        if (name === 'locales' || name === 'resources') {
+            cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+            continue;
+        }
+        if (name === skeleton.executable) {
+            cpSync(from, to);
+            continue;
+        }
+        let st;
+        try {
+            st = lstatSync(from);
+        } catch {
+            continue;
+        }
+        if (st.isDirectory()) continue; // 例如 apps/<device>/ 里的其他导出物
+        const lower = name.toLowerCase();
+        if (lower.endsWith('.zip') || lower.endsWith('.blockmap')) continue;
+        if (lower === 'latest.yml' || lower === 'builder-debug.yml') continue;
+        if (lower.endsWith('.exe')) continue; // 安装器/卸载器
+        cpSync(from, to);
+    }
+}
+
+
 export function exportProject(
     project: LoadedProject,
     options: ExportOptions,
@@ -411,7 +444,7 @@ export function exportProject(
 
         log(`骨架来源：${skeleton.origin}`);
         log(`拷贝运行时骨架 → ${output}`);
-        cpSync(skeleton.root, output, { recursive: true, verbatimSymlinks: true });
+        copySkeleton(skeleton, output);
 
         // 骨架若是"当前运行的应用"，它 Resources 里可能带着上一次注入的东西，清掉
         const resourcesDir =
