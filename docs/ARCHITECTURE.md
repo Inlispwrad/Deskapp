@@ -63,9 +63,11 @@ macOS / Windows 上默认用 Deskapp 自绘的标题栏,Swiss Style 排版 + 系
 ```
 
 - **左**:图标 + hairline + 全大写紧字距标题。图标优先用**页面自己的 favicon**
-  (那才是"网页传进来的图标"),没有才退回 manifest / 内嵌配置的图标,都没有就画一个
-  Swiss 红方块不留空位。用 `<img>` 而不是 CSS 背景图:URL 不进样式表没有注入面,
-  且由 Chromium 解码——`.ico` / `.svg` 都能正确显示(主进程的 `nativeImage` 这两种都不支持)
+  (那才是"网页传进来的图标";本地 `app://` 页面的 favicon 同样会被采用),
+  没有才退回 manifest / 内嵌配置的图标,都没有就画一个 Swiss 红方块不留空位。
+  用 `<img>` 而不是 CSS 背景图:URL 不进样式表没有注入面,
+  且由 Chromium 解码——`.ico` / `.svg` 都能正确显示(主进程的 `nativeImage` 这两种都不支持)。
+  Windows / Linux 还会尽力把 favicon 同时设为窗口/任务栏图标(PNG/JPEG 可直接解码,失败则保持原样)。
 - **右**:`FPS` / `MS`(主线程每帧脚本耗时)/ `CPU` / `MEM`,约 2Hz 刷新,都是**被装载 app 自己**的数据。
   点一下开 Inspector。窄窗口按优先级依次折叠 MS → CPU → 标题
 - **配色分档**:FPS < 25 黄、< 10 红;MS > 8ms 黄、> 16ms 红

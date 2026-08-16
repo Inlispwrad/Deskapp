@@ -63,6 +63,21 @@ export function setCrossOriginIsolated(value: boolean): void {
     crossOriginIsolated = value;
 }
 
+/** 把一个 app:// URL 解析回本地文件路径（不在任何 root 内则返回 null）。 */
+export function filePathForAppUrl(url: string): string | null {
+    try {
+        const u = new URL(url);
+        if (u.protocol !== `${APP_SCHEME}:`) return null;
+        const root = roots.get(u.host);
+        if (!root) return null;
+        const pathname = decodeURIComponent(u.pathname);
+        const p = normalize(join(root, pathname));
+        return isInside(root, p) ? p : null;
+    } catch {
+        return null;
+    }
+}
+
 export function appOrigin(): string {
     return APP_ORIGIN;
 }

@@ -29,6 +29,7 @@ import {
     app,
     dialog,
     nativeImage,
+    net,
     screen,
     shell as electronShell,
     type WebContents,
@@ -80,7 +81,7 @@ import {
 import { IconCache } from './icon-cache';
 import { collectGpuStatus } from './gpu-info';
 import { sampleSystem } from './metrics';
-import { setCrossOriginIsolated } from './protocol';
+import { filePathForAppUrl, setCrossOriginIsolated } from './protocol';
 import { allowApiOrigin as addCorsOrigin, registerPageOrigin, unregisterPageOrigin } from './cors';
 import {
     TargetError,
@@ -450,6 +451,36 @@ export class Host {
         else this.win?.setIcon(img);
         // 缩到标题栏用的尺寸再编码，避免把 1024² 的 PNG 反复塞进 IPC
         this.iconDataUrl = img.resize({ width: 32, height: 32, quality: 'best' }).toDataURL();
+    }
+
+    /**
+     * 尽力把页面 favicon 变成窗口/任务栏图标（Windows / Linux）。
+     * 标题栏图标已经用 Chromium 的 <img> 解码，SVG/ICO 都能显示；
+     * 这里只是补任务栏图标，解码失败就保持原样，绝不打断页面。
+     */
+    private async applyFaviconToWindow(url: string): Promise<void> {
+        if (!this.win || process.platform === 'darwin') return;
+        try {
+            let img: Electron.NativeImage | null = null;
+            if (url.startsWith('data:')) {
+                img = nativeImage.createFromDataURL(url);
+            } else if (/^app:/i.test(url)) {
+                const p = filePathForAppUrl(url);
+                if (p) img = nativeImage.createFromPath(p);
+            } else if (/^file:/i.test(url)) {
+                const { fileURLToPath } = await import('node:url');
+                img = nativeImage.createFromPath(fileURLToPath(url));
+            } else if (/^https?:/i.test(url)) {
+                const res = await net.fetch(url);
+                if (res.ok) {
+                    const buf = Buffer.from(await res.arrayBuffer());
+                    img = nativeImage.createFromBuffer(buf);
+                }
+            }
+            if (img && !img.isEmpty()) this.win?.setIcon(img);
+        } catch {
+            /* 任务栏图标更新失败可忽略 —— 标题栏图标才是主 UI */
+        }
     }
 
     /**
@@ -1071,11 +1102,13 @@ export class Host {
         // 标题栏图标要的是"网页传进来的图标" —— favicon 才是那个东西。
         // manifest 的 icons 是应用级声明（Dock 图标用它），favicon 是当前页面的身份。
         wc.on('page-favicon-updated', (_e, favicons) => {
-            const url = favicons.find((u) => /^(https?|data|file):/i.test(u));
+            // app:// 页面的 favicon 也是 app:// —— 必须放行，那才是内容自己的图标
+            const url = favicons.find((u) => /^(https?|data|file|app):/i.test(u));
             if (url && url !== this.faviconUrl) {
                 this.faviconUrl = url;
                 this.pushTitlebar();
                 void this.adoptPageIcon(url);
+                void this.applyFaviconToWindow(url);
             }
         });
 
