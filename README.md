@@ -1,4 +1,4 @@
-# 🖥️ Deskapp
+# <img src="resources/icon.png" alt="Deskapp icon" width="42" style="vertical-align: middle;"> Deskapp
 
 **English** · [简体中文](README.zh-CN.md)
 
