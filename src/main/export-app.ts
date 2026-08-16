@@ -373,18 +373,14 @@ function brandGeneric(
     if (process.platform === 'win32') {
         const rcedit = locateRcedit();
         if (rcedit && existsSync(rcedit)) {
-            // 老 rcedit 对非 ASCII 路径会失败：把 exe/ico 都放到 ASCII 临时路径处理，再拷回
+            // rcedit 对非 ASCII 路径和刚拷出来的 exe 都不稳定：统一放到 ASCII 临时目录
+            // 处理，成功后再拷回输出目录。失败可能是 Defender/索引器短暂锁住，稍等重试。
             const asciiTemp = tmpdir();
-            let rceditTarget = to;
-            let tempExe: string | null = null;
-            if (/[^ -]/.test(to)) {
-                tempExe = join(asciiTemp, `.deskapp-rcedit-${process.pid}.exe`);
-                rmSync(tempExe, { force: true });
-                cpSync(to, tempExe);
-                rceditTarget = tempExe;
-            }
+            const tempExe = join(asciiTemp, `.deskapp-rcedit-${process.pid}.exe`);
+            rmSync(tempExe, { force: true });
+            cpSync(to, tempExe);
             const args = [
-                rceditTarget,
+                tempExe,
                 '--set-version-string',
                 'ProductName',
                 displayName,
@@ -402,11 +398,15 @@ function brandGeneric(
                     icoPath = null;
                 }
             }
-            const res = spawnSync(rcedit, args, { encoding: 'utf8', windowsHide: true });
-            if (tempExe) {
-                if (res.status === 0) cpSync(tempExe, to);
-                rmSync(tempExe, { force: true });
+            let res = spawnSync(rcedit, args, { encoding: 'utf8', windowsHide: true });
+            for (let attempt = 0; res.status !== 0 && attempt < 5; attempt++) {
+                sleepSync(400);
+                res = spawnSync(rcedit, args, { encoding: 'utf8', windowsHide: true });
             }
+            if (res.status === 0) {
+                cpSync(tempExe, to);
+            }
+            rmSync(tempExe, { force: true });
             if (icoPath) rmSync(icoPath, { force: true });
             if (res.status !== 0) {
                 caveats.push(
@@ -426,6 +426,14 @@ function brandGeneric(
         caveats.push('Linux 的图标需要自行写 .desktop 条目');
     }
     return caveats;
+}
+
+function sleepSync(ms: number): void {
+    try {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    } catch {
+        /* SharedArrayBuffer 不可用就立即重试 */
+    }
 }
 
 function locateRcedit(): string | null {
