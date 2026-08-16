@@ -213,19 +213,27 @@ body.titlebar-body { background: transparent; overflow: hidden; }
     grid-template-rows: 1fr auto;
     padding: 48px 56px 20px;
     gap: 24px;
-    overflow: hidden;
+    width: 100%; max-width: 100%; min-width: 0;
+    overflow: hidden; overflow-x: hidden;
 }
-.launcher-head { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.launcher-head {
+    display: flex; flex-direction: column; gap: 6px;
+    min-height: 0; min-width: 0; max-width: 100%;
+}
 .launcher h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.4px; }
 .launcher .sub { color: var(--text-dim); margin-bottom: 22px; }
 .launcher .row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .launcher .row input { flex: 1; }
 
 /* 两种启动模式并排：本地目录 / 网址。差别只在入口，其余协议完全一致 */
-.modes { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; align-items: start; }
+.modes {
+    display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; align-items: start;
+    min-width: 0; max-width: 100%;
+}
 .mode {
     border: 1px solid var(--line); border-radius: 9px; padding: 14px;
     display: flex; flex-direction: column; gap: 8px; background: var(--bg-raise);
+    min-width: 0; max-width: 100%;
 }
 .mode-title { font-size: 12px; font-weight: 650; letter-spacing: .02em; }
 .mode-sub { color: var(--text-dim); font-size: 11.5px; margin-top: -4px; }
@@ -240,17 +248,23 @@ body.titlebar-body { background: transparent; overflow: hidden; }
     letter-spacing: 0.6px; color: var(--text-dim);
     margin: 22px 0 8px;
 }
-.recents { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.recents {
+    overflow-y: auto; overflow-x: hidden; min-height: 0;
+    display: flex; flex-direction: column; gap: 4px;
+    min-width: 0; max-width: 100%;
+}
 .recent {
     display: flex; align-items: baseline; gap: 10px;
     padding: 8px 10px; border-radius: 7px; cursor: pointer;
     border: 1px solid transparent;
+    min-width: 0; max-width: 100%;
 }
 .recent:hover { background: var(--bg-raise); border-color: var(--line); }
 .recent .label { font-weight: 550; }
 .recent .path {
     color: var(--text-dim); font-family: var(--mono); font-size: 11px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+    min-width: 0;
 }
 .recent .kind {
     font-size: 10px; color: var(--text-dim); border: 1px solid var(--line);
