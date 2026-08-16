@@ -213,7 +213,8 @@ electron . --export <项目目录> [--out <输出目录>] [--export-name 名称]
 > **平台差异**:macOS 与 Windows 两条路径都经过实测 —— 导出物独立跑通了完整四槽位协议
 > (入口装载 · 启动脚本 · 常驻命令行 · 关闭脚本)。Linux 用与 Windows 同一套拷贝注入逻辑,
 > 但**未在实机验证过**。
-> 另:Windows 的 exe 图标与产品名编在 PE 资源里,本导出方式改不了(窗口标题正确);
+> 另:Windows 导出时会用随包附带的 rcedit 更新 exe 的 `ProductName`/`FileDescription`
+> 与图标(优先清单图标,其次用 Deskapp 缓存的页面图标),任务管理器里不再是 Deskapp;
 > Linux 的图标需要自行写 `.desktop` 条目。
 > 这些局限会原样出现在导出完成的提示里,不藏着。
 

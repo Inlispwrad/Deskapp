@@ -151,7 +151,7 @@ Enter 的 click `detail === 0` 且焦点保留）。
 7. **`src/main/host.ts` 已约 1700 行**，是否拆分（窗口/视图/标题栏/项目生命周期/命令五块）待定——
    现在还读得懂，不为拆而拆。
 8. **导出的 Linux 路径未实机验证**（`src/main/export-app.ts` 的 `brandGeneric`）。
-   Windows 已实测通过。已知局限：Windows 改不了 exe 的图标与产品名；Linux 需自行写 `.desktop`。
+   Windows 已实测通过。Windows exe 的产品名/图标已用 rcedit 更新；Linux 需自行写 `.desktop`。
 9. **CORS 自动放行不覆盖预检**：需要 OPTIONS 的请求仍要服务端自己应答。
 9.5 ~~点过标题栏指标区后会留一圈红色焦点环~~ **已修**（见「已完成事项」）。
 10. **项目清单没有 JSON Schema**，编辑器里没有补全与校验。字段拼错只会被静默忽略
